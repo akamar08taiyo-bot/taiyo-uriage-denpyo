@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>売上伝票発行依頼書</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      html, body, #root { min-height: 100%; margin: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Yu Gothic", sans-serif;
+        background: #f8fbff;
+        color: #1e293b;
+      }
+      .uriage-app-shell {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(186, 230, 253, .55), transparent 34rem),
+          radial-gradient(circle at top right, rgba(153, 246, 228, .42), transparent 28rem),
+          linear-gradient(180deg, #f0f9ff 0%, #f8fbff 44%, #ffffff 100%);
+      }
+      .uriage-hero {
+        border: 1px solid rgba(186, 230, 253, .9);
+        background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(240,249,255,.92));
+        box-shadow: 0 18px 45px rgba(14, 165, 233, .12);
+      }
+      .uriage-brand-mark {
+        background: linear-gradient(135deg, #38bdf8, #14b8a6);
+        box-shadow: 0 10px 24px rgba(14, 165, 233, .24);
+      }
+      .share-box {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: .75rem;
+        padding: .7rem .85rem;
+        border: 1px solid #bae6fd;
+        border-radius: 1rem;
+        background: rgba(240, 253, 250, .86);
+        box-shadow: 0 10px 24px rgba(15, 118, 110, .08);
+      }
+      .toggle-button {
+        border-radius: .75rem;
+        background: linear-gradient(135deg, #0ea5e9, #0d9488);
+        color: white;
+        font-weight: 800;
+        box-shadow: 0 8px 18px rgba(14, 165, 233, .18);
+      }
+      .toggle-button:hover { filter: brightness(.98); }
+      @media print {
+        @page { size: A4 portrait; margin: 10mm; }
+        body { background: white; }
+        .uriage-print { display: block !important; }
+      }
+    </style>
+    <script type="module" crossorigin src="/taiyo-uriage-denpyo/assets/index-wDJah6UF.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
