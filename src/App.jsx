@@ -4,11 +4,9 @@ import UriageDenpyo from './components/UriageDenpyo.jsx'
 const MASTER_STORAGE_KEY = 'fukushi_uriage_master_v1'
 
 const DEFAULT_MASTER = {
-  offices: ['本社'],
+  offices: [],
   salesPersons: [],
   contractors: [],
-  defaultOffice: '本社',
-  defaultSalesPerson: '',
 }
 
 const DEFAULT_BRIDGE = {
@@ -32,8 +30,6 @@ function loadMaster() {
       offices: cleanList(saved.offices),
       salesPersons: cleanList(saved.salesPersons),
       contractors: cleanList(saved.contractors),
-      defaultOffice: String(saved.defaultOffice || '').trim(),
-      defaultSalesPerson: String(saved.defaultSalesPerson || '').trim(),
     }
   } catch {
     return DEFAULT_MASTER

@@ -43,7 +43,10 @@ const exTax = (n) => Math.ceil((n || 0) / TAX)
 /* ── 計算ロジック ────────────────────────────── */
 function calculate({ items, total, remaining, userRatio, miyako, isSelfPay }) {
   const insuranceRatio = 1 - userRatio
-  const effRemaining = isSelfPay ? 0 : remaining
+  // 介護保険残高が未入力（空欄）のときは支給限度額の超過なしとして計算する。
+  // 超過しそうな場合だけ残高を入力してもらう運用に合わせている。
+  const hasRemaining = remaining !== '' && remaining !== null && remaining !== undefined
+  const effRemaining = isSelfPay ? 0 : (hasRemaining ? Number(remaining) || 0 : total)
   const insuranceCovered = Math.min(total, effRemaining)
   const excess = Math.max(0, total - effRemaining)
   let userBurden, insurerBurden
@@ -56,6 +59,13 @@ function calculate({ items, total, remaining, userRatio, miyako, isSelfPay }) {
   }
   return { total, insuranceCovered, excess, userBurden, insurerBurden, totalUserBurden: userBurden + excess }
 }
+
+/* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている） ── */
+const PRINT_HEAD_BG = '#dbeafe'    // 表の見出し行
+const PRINT_LABEL_BG = '#eff6ff'   // 項目名セル
+const PRINT_EXTAX_BG = '#fef9c3'   // 税抜の列
+const PRINT_MARK_BG = '#fff3a8'    // 利用者/保険者負担額の強調
+const PRINT_TOTAL_BG = '#bfdbfe'   // ご利用者お支払い合計
 
 /* ── スタイル定数 ─────────────────────────────── */
 const card = 'bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 p-4 border border-white/80'
@@ -81,7 +91,7 @@ function OptionRow({ label, options, value, onChange, cols }) {
               onClick={() => onChange(v)}
               className={`h-7 rounded-md text-xs font-medium transition ${
                 active
-                  ? 'bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-sm shadow-sky-200'
+                  ? 'bg-sky-600 text-white shadow-sm shadow-sky-200'
                   : 'bg-slate-100/80 text-slate-600 hover:bg-sky-50 hover:text-sky-800'
               }`}
             >
@@ -122,8 +132,7 @@ const normalizeMasterLines = (value) => [
 const createMasterDraft = (master) => ({
   offices: (master?.offices || []).join('\n'),
   salesPersons: (master?.salesPersons || []).join('\n'),
-  defaultOffice: master?.defaultOffice || '',
-  defaultSalesPerson: master?.defaultSalesPerson || '',
+  contractors: (master?.contractors || []).join('\n'),
 })
 
 function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
@@ -144,51 +153,44 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
           onSave()
         }}
       >
-        <div className="border-b border-sky-100 bg-gradient-to-r from-sky-50 to-teal-50 px-5 py-4">
+        <div className="border-b border-sky-100 bg-sky-50 px-5 py-4">
           <h2 id="master-settings-title" className="text-lg font-black text-slate-800">マスタ設定</h2>
           <p className="mt-1 text-xs font-semibold text-slate-500">
-            営業所と担当者の候補を1行ずつ登録できます。既定値は保存後、現在の伝票にも反映されます。
+            営業所・担当者・工務店の候補を1行ずつ登録できます。伝票に入力した内容は自動で記憶され、次回はそのまま引き継がれます。
           </p>
         </div>
-        <div className="grid gap-5 p-5 md:grid-cols-2">
+        <div className="grid gap-5 p-5 md:grid-cols-3">
           <section>
             <label className={fieldLabel} htmlFor="master-offices">営業所の候補</label>
             <textarea
               id="master-offices"
-              rows={6}
+              rows={8}
               value={draft.offices}
               onChange={(event) => onChange({ ...draft, offices: event.target.value })}
-              className={`${baseInput} h-auto min-h-32 resize-y py-2 leading-6`}
+              className={`${baseInput} h-auto min-h-40 resize-y py-2 leading-6`}
               placeholder={'本社\n福岡営業所'}
-            />
-            <label className={`${fieldLabel} mt-3`} htmlFor="master-default-office">営業所の既定値</label>
-            <input
-              id="master-default-office"
-              type="text"
-              value={draft.defaultOffice}
-              onChange={(event) => onChange({ ...draft, defaultOffice: event.target.value })}
-              className={baseInput}
-              placeholder="例：本社"
             />
           </section>
           <section>
             <label className={fieldLabel} htmlFor="master-staff">担当者の候補</label>
             <textarea
               id="master-staff"
-              rows={6}
+              rows={8}
               value={draft.salesPersons}
               onChange={(event) => onChange({ ...draft, salesPersons: event.target.value })}
-              className={`${baseInput} h-auto min-h-32 resize-y py-2 leading-6`}
+              className={`${baseInput} h-auto min-h-40 resize-y py-2 leading-6`}
               placeholder={'山田 太郎\n佐藤 花子'}
             />
-            <label className={`${fieldLabel} mt-3`} htmlFor="master-default-staff">担当者の既定値</label>
-            <input
-              id="master-default-staff"
-              type="text"
-              value={draft.defaultSalesPerson}
-              onChange={(event) => onChange({ ...draft, defaultSalesPerson: event.target.value })}
-              className={baseInput}
-              placeholder="例：山田 太郎"
+          </section>
+          <section>
+            <label className={fieldLabel} htmlFor="master-contractors">工務店の候補</label>
+            <textarea
+              id="master-contractors"
+              rows={8}
+              value={draft.contractors}
+              onChange={(event) => onChange({ ...draft, contractors: event.target.value })}
+              className={`${baseInput} h-auto min-h-40 resize-y py-2 leading-6`}
+              placeholder={'○○工務店\n△△建設'}
             />
           </section>
         </div>
@@ -204,7 +206,7 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
             </button>
             <button
               type="submit"
-              className="h-10 rounded-xl bg-gradient-to-r from-sky-500 to-teal-500 px-5 text-xs font-extrabold text-white shadow-sm shadow-sky-200 hover:brightness-[.98]"
+              className="h-10 rounded-xl bg-sky-600 px-5 text-xs font-extrabold text-white shadow-sm shadow-sky-200 hover:brightness-[.98]"
             >
               保存して反映
             </button>
@@ -244,7 +246,7 @@ export default function UriageDenpyo({
   const [billingType, setBillingType] = useState('receipt')
   const [careLevel, setCareLevel] = useState('支援１')
   const [userRatio, setUserRatio] = useState(0.1)
-  const [remaining, setRemaining] = useState(DEFAULT_REMAINING.housing)
+  const [remaining, setRemaining] = useState('')
   const [showBalance, setShowBalance] = useState(false)
   const [items, setItems] = useState([newItem()])
   const [miyakoChecked, setMiyakoChecked] = useState(false)
@@ -253,34 +255,30 @@ export default function UriageDenpyo({
   const [triedPrint, setTriedPrint] = useState(false)
   const [isSelfPay, setIsSelfPay] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
-  const [contractor, setContractor] = useState('')
+  const [contractor, setContractor] = useState(() => localStorage.getItem('fukushi_contractor') || '')
   const [contractorManual, setContractorManual] = useState(false)
   const [categories, setCategories] = useState([])
   const toggleCategory = (c) =>
     setCategories((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]))
   const [shareUrl, setShareUrl] = useState('')
   const [shareMsg, setShareMsg] = useState('')
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [showMasterSettings, setShowMasterSettings] = useState(false)
   const [masterDraft, setMasterDraft] = useState(() => createMasterDraft(master))
 
-  /* localStorage 永続化 */
+  /* localStorage 永続化：一度入力した営業所・担当者・工務店は次回起動時にそのまま復元する */
   useEffect(() => { localStorage.setItem('fukushi_staff', staff) }, [staff])
   useEffect(() => { localStorage.setItem('fukushi_salesOffice', salesOffice) }, [salesOffice])
-  // 営業所: マスタが登録されていて未設定なら先頭を自動採用（以後は固定）
+  useEffect(() => { localStorage.setItem('fukushi_contractor', contractor) }, [contractor])
+  // 未入力のときだけ、マスタ登録の先頭を補助的に採用する（既定値の設定項目は廃止）
   useEffect(() => {
     const valid = officeList.filter((n) => (n || '').trim())
-    const fallback = String(master.defaultOffice || '').trim() || valid[0]
-    if (!salesOffice && fallback) setSalesOffice(fallback)
-  }, [officeList, master.defaultOffice, salesOffice])
-
-  useEffect(() => {
-    const fallback = String(master.defaultSalesPerson || '').trim()
-    if (!staff && fallback) setStaff(fallback)
-  }, [master.defaultSalesPerson, staff])
+    if (!salesOffice && valid[0]) setSalesOffice(valid[0])
+  }, [officeList, salesOffice])
 
   /* サービス区分変更：明細(金額/仕切り)はクリア、基本情報・属性は維持 */
   useEffect(() => {
-    setRemaining(DEFAULT_REMAINING[serviceType] || DEFAULT_REMAINING.housing)
+    setRemaining('')
     setMiyakoChecked(false)
     setItems([newItem()])
     if (serviceType !== 'specific') setCategories([])
@@ -450,6 +448,23 @@ export default function UriageDenpyo({
     if (canPrint) printDoc('portrait')
   }
 
+  /* PDF保存（印刷と同じ帳票レイアウトをそのままA4縦で出力する） */
+  async function handleDownloadPdf() {
+    setTriedPrint(true)
+    if (!canPrint) return
+    setPdfBusy(true)
+    setShareMsg('')
+    try {
+      const { downloadDenpyoPdf } = await import('../pdf-export.js')
+      await downloadDenpyoPdf({ customerName, issueDate })
+      setShareMsg('PDFを保存しました。')
+    } catch (error) {
+      setShareMsg(error?.message || 'PDFを保存できませんでした。')
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   /* 共有リンク・メール・全削除 */
   function snapshotSales() {
     return {
@@ -484,24 +499,14 @@ export default function UriageDenpyo({
   }
 
   function saveMasterSettings() {
-    const defaultOffice = masterDraft.defaultOffice.trim()
-    const defaultSalesPerson = masterDraft.defaultSalesPerson.trim()
-    const offices = normalizeMasterLines(masterDraft.offices)
-    const salesPersons = normalizeMasterLines(masterDraft.salesPersons)
-    if (defaultOffice && !offices.includes(defaultOffice)) offices.unshift(defaultOffice)
-    if (defaultSalesPerson && !salesPersons.includes(defaultSalesPerson)) salesPersons.unshift(defaultSalesPerson)
-
     setMaster?.((previous) => ({
       ...previous,
-      offices,
-      salesPersons,
-      defaultOffice,
-      defaultSalesPerson,
+      offices: normalizeMasterLines(masterDraft.offices),
+      salesPersons: normalizeMasterLines(masterDraft.salesPersons),
+      contractors: normalizeMasterLines(masterDraft.contractors),
     }))
-    if (defaultOffice) setSalesOffice(defaultOffice)
-    if (defaultSalesPerson) setStaff(defaultSalesPerson)
     setShowMasterSettings(false)
-    setShareMsg('マスタ設定を保存し、伝票へ反映しました。')
+    setShareMsg('マスタ設定を保存しました。')
   }
 
   function clearAll() {
@@ -516,7 +521,7 @@ export default function UriageDenpyo({
     setBillingType('receipt')
     setCareLevel('支援１')
     setUserRatio(0.1)
-    setRemaining(DEFAULT_REMAINING.housing)
+    setRemaining('')
     setItems([newItem()])
     setMiyakoChecked(false)
     setShowExTax(false)
@@ -564,7 +569,7 @@ export default function UriageDenpyo({
           </div>
           <div className="min-w-0">
             <p className="text-xs font-extrabold text-sky-700 tracking-[0.16em]">太陽シルバーサービス</p>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-800">売上伝票発行依頼書</h1>
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-800">売上伝票発行依頼書（住宅改修・福祉用具工事）</h1>
           </div>
           <div className="ml-auto flex flex-wrap gap-2 text-[11px] font-bold text-slate-600">
             <span className="rounded-full bg-sky-50 border border-sky-100 px-3 py-1">URL共有対応</span>
@@ -579,8 +584,9 @@ export default function UriageDenpyo({
         <div className="bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 px-3 py-2 flex flex-wrap items-center gap-2">
           <span className="text-xs font-extrabold text-sky-800">操作:</span>
           <button type="button" onClick={createMail} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">メール作成</button>
-          <button type="button" onClick={copyShareLink} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-sm shadow-sky-200 hover:brightness-[.98]">共有リンク</button>
-          <button type="button" onClick={openMasterSettings} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-white border border-teal-200 text-teal-800 hover:bg-teal-50">マスタ設定</button>
+          <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
+          <button type="button" onClick={copyShareLink} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-sky-600 text-white shadow-sm shadow-sky-200 hover:brightness-[.98]">共有リンク</button>
+          <button type="button" onClick={openMasterSettings} className="h-9 px-3 rounded-xl text-xs font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">マスタ設定</button>
           <button type="button" onClick={clearAll} className="h-9 px-3 rounded-xl text-xs font-extrabold border border-rose-200 text-rose-600 hover:bg-rose-50">空白の状態に戻す</button>
           <div className="ml-auto text-xs font-bold text-slate-500">{shareMsg}</div>
         </div>
@@ -628,7 +634,7 @@ export default function UriageDenpyo({
                         key={c}
                         className={`flex items-center gap-2 px-2 py-1.5 rounded-md border text-xs font-bold cursor-pointer transition ${
                           active
-                          ? 'bg-gradient-to-r from-sky-500 to-teal-500 text-white border-sky-500 shadow-sm shadow-sky-200'
+                          ? 'bg-sky-600 text-white border-sky-500 shadow-sm shadow-sky-200'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'
                         }`}
                       >
@@ -653,7 +659,7 @@ export default function UriageDenpyo({
             <div className="space-y-2">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div>
-                  <label className={fieldLabel}>発行日</label>
+                  <label className={fieldLabel}>施工（納品予定日）</label>
                   <input
                     type="date"
                     value={issueDate}
@@ -829,7 +835,7 @@ export default function UriageDenpyo({
               <input
                 type="number"
                 value={remaining || ''}
-                onChange={(e) => setRemaining(Number(e.target.value) || 0)}
+                onChange={(e) => setRemaining(e.target.value === '' ? '' : Number(e.target.value) || 0)}
                 placeholder="超過しそうな時のみ入力"
                 className="w-full h-11 rounded-2xl border border-slate-200 bg-slate-50/80 pl-8 pr-3 text-right text-xl font-extrabold tracking-tight text-slate-800 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
@@ -842,7 +848,7 @@ export default function UriageDenpyo({
           {/* 明細 */}
           <div className={card}>
             <div className="flex items-center justify-between mb-2">
-              <p className={`${sectionTitle} mb-0`}>明細</p>
+              <p className={`${sectionTitle} mb-0`}>明細<span className="ml-1.5 font-bold text-[10px] text-sky-700">（税込金額で入力）</span></p>
               {serviceType === 'specific' && (
                 <label className="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
                   <input
@@ -865,12 +871,12 @@ export default function UriageDenpyo({
                         <MoneyInput
                           value={item.amount}
                           onChange={(v) => updateItem(item.id, 'amount', v)}
-                          placeholder="金額"
+                          placeholder="金額(税込)"
                         />
                         <MoneyInput
                           value={item.cost}
                           onChange={(v) => updateItem(item.id, 'cost', v)}
-                          placeholder="仕切り"
+                          placeholder="仕切り(税込)"
                         />
                       </div>
                     ) : (
@@ -878,7 +884,7 @@ export default function UriageDenpyo({
                         <MoneyInput
                           value={item.amount}
                           onChange={(v) => updateItem(item.id, 'amount', v)}
-                          placeholder="金額"
+                          placeholder="金額(税込)"
                         />
                       </div>
                     )}
@@ -1001,7 +1007,7 @@ export default function UriageDenpyo({
           </div>
 
           {/* 合計パネル */}
-          <div className="bg-gradient-to-r from-sky-500 to-teal-500 text-white rounded-2xl p-4 shadow-md shadow-sky-200">
+          <div className="bg-sky-600 text-white rounded-2xl p-4 shadow-md shadow-sky-200">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">ご利用者お支払い合計</span>
               <span className="text-xl font-bold">{fmt(calc.totalUserBurden)}</span>
@@ -1021,7 +1027,7 @@ export default function UriageDenpyo({
           <button
             type="button"
             onClick={handlePrint}
-            className="w-full h-11 bg-gradient-to-r from-sky-500 to-teal-500 hover:brightness-[.98] text-white text-sm font-extrabold rounded-2xl shadow-md shadow-sky-200 transition"
+            className="w-full h-11 bg-sky-600 hover:brightness-[.98] text-white text-sm font-extrabold rounded-2xl shadow-md shadow-sky-200 transition"
           >
             印刷
           </button>
@@ -1034,7 +1040,7 @@ export default function UriageDenpyo({
       {/* 印刷ヘッダー */}
       <div className="text-center mb-4">
         <p className="text-xs text-slate-500">{salesOffice}</p>
-        <h1 className="text-base font-bold mt-1">売上伝票発行依頼書</h1>
+        <h1 className="text-base font-bold mt-1">売上伝票発行依頼書（住宅改修・福祉用具工事）</h1>
       </div>
 
       {/* 基本情報テーブル */}
@@ -1047,58 +1053,58 @@ export default function UriageDenpyo({
         </colgroup>
         <tbody>
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">サービス区分</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>サービス区分</th>
             <td className="border border-slate-500 px-2 py-1">
               {serviceType === 'housing' ? '住宅改修' : '特定福祉用具'}
             </td>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">発行日</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>施工（納品予定日）</th>
             <td className="border border-slate-500 px-2 py-1">{issueDate}</td>
           </tr>
           {serviceType === 'specific' && (
             <tr>
-              <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">種目</th>
+              <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>種目</th>
               <td className="border border-slate-500 px-2 py-1" colSpan={3}>{categories.join('、')}</td>
             </tr>
           )}
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">担当者</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>担当者</th>
             <td className="border border-slate-500 px-2 py-1">{staff}</td>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">顧客区分</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>顧客区分</th>
             <td className="border border-slate-500 px-2 py-1">{customerType === 'new' ? '新規' : '既存'}</td>
           </tr>
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">顧客名</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>顧客名</th>
             <td className="border border-slate-500 px-2 py-1" colSpan={3}>{customerName}</td>
           </tr>
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">住所</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>住所</th>
             <td className="border border-slate-500 px-2 py-1" colSpan={3}>{customerAddress}</td>
           </tr>
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">居宅名</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>居宅名</th>
             <td className="border border-slate-500 px-2 py-1">{officeName}</td>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">担当ケアマネージャー</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>担当ケアマネージャー</th>
             <td className="border border-slate-500 px-2 py-1">{careManager}</td>
           </tr>
           {serviceType === 'housing' && (
             <tr>
-              <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">施工業者</th>
+              <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>施工業者</th>
               <td className="border border-slate-500 px-2 py-1" colSpan={3}>{contractor}</td>
             </tr>
           )}
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">請求区分</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>請求区分</th>
             <td className="border border-slate-500 px-2 py-1">
               {billingType === 'receipt' ? '受領委任払い' : '償還払い'}
             </td>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">介護度</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>介護度</th>
             <td className="border border-slate-500 px-2 py-1">{careLevel}</td>
           </tr>
           <tr>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">負担割合</th>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>負担割合</th>
             <td className="border border-slate-500 px-2 py-1">{burdenLabel}</td>
-            <th className="border border-slate-500 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-tight">介護保険残額</th>
-            <td className="border border-slate-500 px-2 py-1">{fmt(remaining)}</td>
+            <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>介護保険残額</th>
+            <td className="border border-slate-500 px-2 py-1">{remaining === '' || remaining === null || remaining === undefined ? '—（超過なし）' : fmt(remaining)}</td>
           </tr>
         </tbody>
       </table>
@@ -1115,14 +1121,14 @@ export default function UriageDenpyo({
           {hasCost && showExTax && <col />}
         </colgroup>
         <thead>
-          <tr className="bg-slate-50">
+          <tr style={{ background: PRINT_HEAD_BG }}>
             <th className="border border-slate-500 px-1.5 py-1 text-center">No</th>
             {showPrintProductName && <th className="border border-slate-500 px-1.5 py-1 text-left">商品名</th>}
             {showPrintColor && <th className="border border-slate-500 px-1.5 py-1 text-left">カラー</th>}
             <th className="border border-slate-500 px-1.5 py-1 text-right">{hasCost ? '工事合計金額(税込)' : '金額(税込)'}</th>
-            {showExTax && <th className="border border-slate-500 px-1.5 py-1 text-right" style={hasCost ? { background: '#fff3a8' } : undefined}>{hasCost ? '工事合計金額(税抜)' : '金額(税抜)'}</th>}
+            {showExTax && <th className="border border-slate-500 px-1.5 py-1 text-right" style={{ background: PRINT_EXTAX_BG }}>{hasCost ? '工事合計金額(税抜)' : '金額(税抜)'}</th>}
             {hasCost && <th className="border border-slate-500 px-1.5 py-1 text-right">工事金額仕切り(税込)</th>}
-            {hasCost && showExTax && <th className="border border-slate-500 px-1.5 py-1 text-right" style={{ background: '#fff3a8' }}>工事金額仕切り(税抜)</th>}
+            {hasCost && showExTax && <th className="border border-slate-500 px-1.5 py-1 text-right" style={{ background: PRINT_EXTAX_BG }}>工事金額仕切り(税抜)</th>}
           </tr>
         </thead>
         <tbody>
@@ -1137,13 +1143,13 @@ export default function UriageDenpyo({
               )}
               <td className="border border-slate-500 px-1.5 py-1 text-right align-top">{fmt(item.amount)}</td>
               {showExTax && (
-                <td className="border border-slate-500 px-1.5 py-1 text-right align-top" style={hasCost ? { background: '#fff3a8' } : undefined}>{fmt(exTax(item.amount))}</td>
+                <td className="border border-slate-500 px-1.5 py-1 text-right align-top" style={{ background: PRINT_EXTAX_BG }}>{fmt(exTax(item.amount))}</td>
               )}
               {hasCost && (
                 <td className="border border-slate-500 px-1.5 py-1 text-right align-top">{fmt(item.cost)}</td>
               )}
               {hasCost && showExTax && (
-                <td className="border border-slate-500 px-1.5 py-1 text-right align-top" style={{ background: '#fff3a8' }}>{fmt(exTax(item.cost))}</td>
+                <td className="border border-slate-500 px-1.5 py-1 text-right align-top" style={{ background: PRINT_EXTAX_BG }}>{fmt(exTax(item.cost))}</td>
               )}
             </tr>
           ))}
@@ -1175,31 +1181,32 @@ export default function UriageDenpyo({
           {showExTax && <col style={{ width: '25%' }} />}
         </colgroup>
         <thead>
-          <tr className="bg-slate-50">
+          <tr style={{ background: PRINT_HEAD_BG }}>
             <th className="border border-slate-500 px-2 py-1 text-left">項目</th>
             <th className="border border-slate-500 px-2 py-1 text-right">税込</th>
-            {showExTax && <th className="border border-slate-500 px-2 py-1 text-right">税抜</th>}
+            {showExTax && <th className="border border-slate-500 px-2 py-1 text-right" style={{ background: PRINT_EXTAX_BG }}>税抜</th>}
           </tr>
         </thead>
         <tbody>
           {resultRows.map(([label, val]) => {
             const highlight = label.includes('利用者負担額') || label.includes('保険者負担額')
-            const hlStyle = highlight ? { background: '#fff3a8' } : undefined
+            const hlStyle = highlight ? { background: PRINT_MARK_BG } : undefined
             return (
               <tr key={label}>
-                <td className="border border-slate-500 px-2 py-1" style={hlStyle}>{label}</td>
+                <td className="border border-slate-500 px-2 py-1" style={{ background: PRINT_LABEL_BG, ...(hlStyle || {}) }}>{label}</td>
                 <td className="border border-slate-500 px-2 py-1 text-right" style={hlStyle}>{fmt(val)}</td>
                 {showExTax && (
-                  <td className="border border-slate-500 px-2 py-1 text-right" style={hlStyle}>{fmt(exTax(val))}</td>
+                  <td className="border border-slate-500 px-2 py-1 text-right" style={hlStyle || { background: PRINT_EXTAX_BG }}>{fmt(exTax(val))}</td>
                 )}
               </tr>
             )
           })}
-          <tr className="border border-slate-500 bg-blue-50 font-bold">
-            <td className="border border-slate-500 px-2 py-1">ご利用者お支払い合計</td>
-            <td className="border border-slate-500 px-2 py-1 text-right">{fmt(calc.totalUserBurden)}</td>
+          {/* ご利用者お支払い合計は税込・税抜とも最も目立つ色で強調する */}
+          <tr className="border border-slate-500 font-bold">
+            <td className="border border-slate-500 px-2 py-1" style={{ background: PRINT_TOTAL_BG }}>ご利用者お支払い合計</td>
+            <td className="border border-slate-500 px-2 py-1 text-right" style={{ background: PRINT_TOTAL_BG }}>{fmt(calc.totalUserBurden)}<span className="ml-1 text-[9px] font-normal">(税込)</span></td>
             {showExTax && (
-              <td className="border border-slate-500 px-2 py-1 text-right">{fmt(exTax(calc.totalUserBurden))}</td>
+              <td className="border border-slate-500 px-2 py-1 text-right" style={{ background: PRINT_TOTAL_BG }}>{fmt(exTax(calc.totalUserBurden))}<span className="ml-1 text-[9px] font-normal">(税抜)</span></td>
             )}
           </tr>
         </tbody>
