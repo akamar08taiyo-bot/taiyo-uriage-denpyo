@@ -569,7 +569,7 @@ export default function UriageDenpyo({
           </div>
           <div className="min-w-0">
             <p className="text-xs font-extrabold text-sky-700 tracking-[0.16em]">太陽シルバーサービス</p>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-800">売上伝票発行依頼書（住宅改修・福祉用具工事）</h1>
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-800">売上伝票発行依頼書（住宅改修・特定福祉用具購入）</h1>
           </div>
           <div className="ml-auto flex flex-wrap gap-2 text-[11px] font-bold text-slate-600">
             <span className="rounded-full bg-sky-50 border border-sky-100 px-3 py-1">URL共有対応</span>
@@ -1040,7 +1040,7 @@ export default function UriageDenpyo({
       {/* 印刷ヘッダー */}
       <div className="text-center mb-4">
         <p className="text-xs text-slate-500">{salesOffice}</p>
-        <h1 className="text-base font-bold mt-1">売上伝票発行依頼書（住宅改修・福祉用具工事）</h1>
+        <h1 className="text-base font-bold mt-1">売上伝票発行依頼書（住宅改修・特定福祉用具購入）</h1>
       </div>
 
       {/* 基本情報テーブル */}
