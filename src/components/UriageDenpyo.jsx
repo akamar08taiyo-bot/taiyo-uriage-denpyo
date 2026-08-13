@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { printDoc } from '../print.js'
 import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeClipboard } from '../share.js'
+import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 
 /* ── 定数 ─────────────────────────────────── */
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
@@ -227,7 +228,8 @@ export default function UriageDenpyo({
   const officeList = master.offices || []
   const contractorList = master.contractors || []
   const [salesOffice, setSalesOffice] = useState(() => localStorage.getItem('fukushi_salesOffice') || portalSessionOffice() || '')
-  const today = new Date().toISOString().slice(0, 10)
+  // 業務日は日本時間で判定する（UTC基準だとJST深夜0〜9時に前日になる）
+  const today = todayInTokyo()
 
   /* state */
   const [serviceType, setServiceType] = useState('housing')
@@ -378,7 +380,8 @@ export default function UriageDenpyo({
     const s = payload?.sales
     if (!s) return
     if (s.serviceType) setServiceType(s.serviceType)
-    if (s.issueDate) setIssueDate(s.issueDate)
+    // 共有URLは外部から編集できるため、実在する日付のときだけ採用する
+    if (isValidDateString(s.issueDate)) setIssueDate(s.issueDate)
     if (typeof s.salesOffice === 'string') setSalesOffice(s.salesOffice)
     if (typeof s.customerName === 'string') setCustomerName(s.customerName)
     if (typeof s.customerAddress === 'string') setCustomerAddress(s.customerAddress)
