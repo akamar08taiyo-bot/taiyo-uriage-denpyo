@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { printDoc } from '../print.js'
 import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeClipboard } from '../share.js'
 import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
+import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
 
 /* ── 定数 ─────────────────────────────────── */
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
@@ -111,8 +112,11 @@ function MoneyInput({ value, onChange, placeholder }) {
       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">¥</span>
       <input
         type="number"
+        min="0"
+        step="1"
         value={value || ''}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        // HTML属性だけでは貼り付け・IME入力を防げないため、状態へ入れる前にも正規化する
+        onChange={(e) => onChange(parseYen(e.target.value))}
         placeholder={placeholder || '0'}
         className={`${baseInput} ${noSpin} pl-6 text-right`}
       />
@@ -439,11 +443,10 @@ export default function UriageDenpyo({
   const removeItem = (id) => setItems((prev) => (prev.length <= 1 ? prev : prev.filter((it) => it.id !== id)))
   const addItem = () => setItems((prev) => [...prev, newItem()])
 
-  /* バリデーション */
-  const errors = []
-  if (!staff.trim()) errors.push('担当者')
-  if (!customerName.trim()) errors.push('顧客名')
-  const canPrint = errors.length === 0
+  /* バリデーション（印刷・PDF・共有・メールで同じ判定を使う） */
+  const validation = validateDenpyoForOutput({ staff, customerName, items, total, remaining })
+  const errors = validation.errors
+  const canPrint = validation.ok
 
   /* 印刷 */
   const handlePrint = () => {
@@ -482,12 +485,16 @@ export default function UriageDenpyo({
     return `${location.origin}${location.pathname}#/uriage?payload=${payload}`
   }
   async function copyShareLink() {
+    setTriedPrint(true)
+    if (!canPrint) { setShareMsg('入力に不足または誤りがあるため共有できません。'); return }
     const longUrl = buildLongShareUrl()
     setShareUrl(longUrl)
     const copied = await writeClipboard(longUrl)
     setShareMsg(copied ? '共有URLをクリップボードにコピーしました。' : '共有URLを下に表示しました。')
   }
   function createMail() {
+    setTriedPrint(true)
+    if (!canPrint) { setShareMsg('入力に不足または誤りがあるためメールを作成できません。'); return }
     // メール用は短縮しない長いURLをそのまま使用
     const longUrl = buildLongShareUrl()
     setShareUrl(longUrl)
@@ -837,8 +844,11 @@ export default function UriageDenpyo({
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base font-bold text-slate-500">¥</span>
               <input
                 type="number"
+                min="0"
+                step="1"
                 value={remaining || ''}
-                onChange={(e) => setRemaining(e.target.value === '' ? '' : Number(e.target.value) || 0)}
+                // 未入力（空欄）と 0 は区別する。値が入る場合は非負の整数だけを状態へ入れる。
+                onChange={(e) => setRemaining(e.target.value === '' ? '' : parseYen(e.target.value))}
                 placeholder="超過しそうな時のみ入力"
                 className="w-full h-11 rounded-2xl border border-slate-200 bg-slate-50/80 pl-8 pr-3 text-right text-xl font-extrabold tracking-tight text-slate-800 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
@@ -1025,7 +1035,7 @@ export default function UriageDenpyo({
 
           {/* エラー表示 & 印刷ボタン */}
           {triedPrint && !canPrint && (
-            <p className="text-xs text-red-500">未入力: {errors.join('、')}</p>
+            <p className="text-xs text-red-500" role="alert">出力できません: {errors.join('、')}</p>
           )}
           <button
             type="button"
