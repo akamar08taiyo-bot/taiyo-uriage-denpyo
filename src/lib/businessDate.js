@@ -1,10 +1,10 @@
 // 業務日は必ず日本時間（Asia/Tokyo）で判定する。
 //
 // new Date().toISOString() は UTC を返すため、日本時間の 0:00〜8:59 に使うと
-// 前日の日付になる。伝票日付・帳票・ファイル名がすべて1日ずれるため、
+// 前日の日付になる。伝票日付・帳票・集計・ファイル名がすべて1日ずれるため、
 // 業務上の「今日」「今月」はこのモジュールからのみ取得すること。
 //
-// 指示書 COMMON-01 / URI-01 に対応。
+// 指示書 COMMON-01 に対応。全アプリで同一内容を配置している。URI-01。
 
 const TOKYO_TIME_ZONE = 'Asia/Tokyo'
 
@@ -19,8 +19,8 @@ const pad2 = (value) => String(value).padStart(2, '0')
 const pad4 = (value) => String(value).padStart(4, '0')
 
 /** 指定時刻を日本時間で見たときの年・月・日を返す。month は 1〜12。 */
-export function tokyoParts(now = new Date()) {
-  const parts = tokyoFormatter.formatToParts(now)
+export function tokyoParts(date = new Date()) {
+  const parts = tokyoFormatter.formatToParts(date)
   const pick = (type) => Number(parts.find((part) => part.type === type)?.value)
   return { year: pick('year'), month: pick('month'), day: pick('day') }
 }
@@ -30,10 +30,16 @@ export function formatDateString(year, month, day) {
   return `${pad4(year)}-${pad2(month)}-${pad2(day)}`
 }
 
+/** 任意の Date を日本時間で見た 'YYYY-MM-DD' に変換する。無効な Date は null。 */
+export function formatDateInTokyo(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null
+  const { year, month, day } = tokyoParts(date)
+  return formatDateString(year, month, day)
+}
+
 /** 日本時間での業務日を 'YYYY-MM-DD' で返す。 */
 export function todayInTokyo(now = new Date()) {
-  const { year, month, day } = tokyoParts(now)
-  return formatDateString(year, month, day)
+  return formatDateInTokyo(now)
 }
 
 /** 日本時間での業務月を 'YYYY-MM' で返す。 */
