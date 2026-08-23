@@ -573,6 +573,9 @@ export default function UriageDenpyo({
     <div className="uriage-app-shell print:hidden">
       {/* アクションバー */}
       <div className="max-w-[1500px] mx-auto px-4 pt-4">
+        <a href="https://akamar08taiyo-bot.github.io/taiyo-portal/" className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600">
+          ← 業務アプリポータルへ戻る
+        </a>
         <div className="uriage-hero rounded-3xl px-5 py-4 mb-3 flex flex-wrap items-center gap-4">
           <div className="uriage-brand-mark h-12 w-12 rounded-2xl flex items-center justify-center text-white text-xl font-black">
             太
