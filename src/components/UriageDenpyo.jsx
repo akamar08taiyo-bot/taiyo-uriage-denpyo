@@ -5,6 +5,8 @@ import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
 
 /* ── 定数 ─────────────────────────────────── */
+// 介護保険残高が未記入のときに使う、サービス区分ごとの支給限度基準額。
+// 例: 特定福祉用具（限度額100,000円）× 1割負担なら、保険者負担の上限は90,000円になる。
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
 const CARE_LEVELS = ['支援１', '支援２', '介護１', '介護２', '介護３', '介護４', '介護５']
 const CATALOGS = ['ケアマックス', 'ウェルファン']
@@ -43,12 +45,14 @@ const fmt = (n) => `¥${Math.round(n || 0).toLocaleString()}`
 const exTax = (n) => Math.ceil((n || 0) / TAX)
 
 /* ── 計算ロジック ────────────────────────────── */
-function calculate({ items, total, remaining, userRatio, miyako, isSelfPay }) {
+function calculate({ items, total, remaining, userRatio, miyako, isSelfPay, serviceType }) {
   const insuranceRatio = 1 - userRatio
-  // 介護保険残高が未入力（空欄）のときは支給限度額の超過なしとして計算する。
-  // 超過しそうな場合だけ残高を入力してもらう運用に合わせている。
+  // 介護保険残高が未入力（空欄）のときは、サービス区分ごとの支給限度基準額
+  // （住宅改修200,000円／特定福祉用具100,000円）を上限として計算する。
+  // 超過しそうな場合だけ実際の残高を入力してもらう運用に合わせている。
   const hasRemaining = remaining !== '' && remaining !== null && remaining !== undefined
-  const effRemaining = isSelfPay ? 0 : (hasRemaining ? Number(remaining) || 0 : total)
+  const defaultLimit = DEFAULT_REMAINING[serviceType] ?? total
+  const effRemaining = isSelfPay ? 0 : (hasRemaining ? Number(remaining) || 0 : defaultLimit)
   const insuranceCovered = Math.min(total, effRemaining)
   const excess = Math.max(0, total - effRemaining)
   let userBurden, insurerBurden
@@ -428,8 +432,8 @@ export default function UriageDenpyo({
   const showPrintColor = serviceType === 'specific' && hasColorInput
 
   const calc = useMemo(
-    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay }),
-    [items, total, remaining, userRatio, applyMiyako, isSelfPay]
+    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay, serviceType }),
+    [items, total, remaining, userRatio, applyMiyako, isSelfPay, serviceType]
   )
 
   const burdenPct = Math.round(userRatio * 10)
@@ -842,6 +846,7 @@ export default function UriageDenpyo({
             </div>
             <p className="text-[10px] text-slate-500 mb-2 leading-snug">
               ※ 支給限度額を<strong className="text-slate-700">超過しそうな場合のみ</strong>入力してください。通常は未入力でOK。
+              未入力の場合は支給限度基準額（{serviceType === 'housing' ? '住宅改修 ¥200,000' : '特定福祉用具 ¥100,000'}）を上限として自動計算します。
             </p>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base font-bold text-slate-500">¥</span>
@@ -1120,7 +1125,7 @@ export default function UriageDenpyo({
             <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>負担割合</th>
             <td className="border border-slate-500 px-2 py-1">{burdenLabel}</td>
             <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>介護保険残額</th>
-            <td className="border border-slate-500 px-2 py-1">{remaining === '' || remaining === null || remaining === undefined ? '—（超過なし）' : fmt(remaining)}</td>
+            <td className="border border-slate-500 px-2 py-1">{remaining === '' || remaining === null || remaining === undefined ? `未記入（限度額${fmt(DEFAULT_REMAINING[serviceType])}で計算）` : fmt(remaining)}</td>
           </tr>
         </tbody>
       </table>
