@@ -41,7 +41,8 @@ export default function App() {
   const [master, setMaster] = useState(loadMaster)
 
   useEffect(() => {
-    localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify(master))
+    // 保存領域が使えない環境でも画面全体が落ちないようにする（入力自体は続けられる）
+    try { localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify(master)) } catch { /* noop */ }
   }, [master])
 
   return (

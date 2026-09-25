@@ -3,6 +3,7 @@ import { printDoc } from '../print.js'
 import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeClipboard } from '../share.js'
 import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
+import { calculate } from '../lib/burdenCalc.js'
 
 /* ── 定数 ─────────────────────────────────── */
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
@@ -36,31 +37,19 @@ const portalSessionOffice = () => {
   }
 }
 
+// ブラウザの設定で保存領域が使えない場合でも、画面が真っ白にならないようにする
+const readLocal = (key) => {
+  try { return localStorage.getItem(key) || '' } catch { return '' }
+}
+const writeLocal = (key, value) => {
+  try { localStorage.setItem(key, value) } catch { /* 保存できなくても入力は続けられる */ }
+}
+
 let _seq = 0
 const newItem = () => ({ id: ++_seq, amount: 0, cost: 0, catalog: 'ケアマックス', productName: '', color: '' })
 const fmt = (n) => `¥${Math.round(n || 0).toLocaleString()}`
 // 税抜は切り上げ（例: 39,680 → 36,073、80,900 → 73,546）
 const exTax = (n) => Math.ceil((n || 0) / TAX)
-
-/* ── 計算ロジック ────────────────────────────── */
-function calculate({ items, total, remaining, userRatio, miyako, isSelfPay }) {
-  const insuranceRatio = 1 - userRatio
-  // 介護保険残高が未入力（空欄）のときは支給限度額の超過なしとして計算する。
-  // 超過しそうな場合だけ残高を入力してもらう運用に合わせている。
-  const hasRemaining = remaining !== '' && remaining !== null && remaining !== undefined
-  const effRemaining = isSelfPay ? 0 : (hasRemaining ? Number(remaining) || 0 : total)
-  const insuranceCovered = Math.min(total, effRemaining)
-  const excess = Math.max(0, total - effRemaining)
-  let userBurden, insurerBurden
-  if (miyako) {
-    userBurden = items.reduce((s, it) => s + Math.ceil(it.amount * userRatio), 0)
-    insurerBurden = Math.max(0, insuranceCovered - userBurden)
-  } else {
-    userBurden = Math.ceil(insuranceCovered * userRatio)
-    insurerBurden = Math.floor(insuranceCovered * insuranceRatio)
-  }
-  return { total, insuranceCovered, excess, userBurden, insurerBurden, totalUserBurden: userBurden + excess }
-}
 
 /* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている） ── */
 const PRINT_HEAD_BG = '#dbeafe'    // 表の見出し行
@@ -231,7 +220,7 @@ export default function UriageDenpyo({
   const staffList = master.salesPersons || []
   const officeList = master.offices || []
   const contractorList = master.contractors || []
-  const [salesOffice, setSalesOffice] = useState(() => localStorage.getItem('fukushi_salesOffice') || portalSessionOffice() || '')
+  const [salesOffice, setSalesOffice] = useState(() => readLocal('fukushi_salesOffice') || portalSessionOffice() || '')
   // 業務日は日本時間で判定する（UTC基準だとJST深夜0〜9時に前日になる）
   const today = todayInTokyo()
 
@@ -257,11 +246,11 @@ export default function UriageDenpyo({
   const [items, setItems] = useState([newItem()])
   const [miyakoChecked, setMiyakoChecked] = useState(false)
   const [showExTax, setShowExTax] = useState(true)
-  const [staff, setStaff] = useState(() => localStorage.getItem('fukushi_staff') || '')
+  const [staff, setStaff] = useState(() => readLocal('fukushi_staff'))
   const [triedPrint, setTriedPrint] = useState(false)
   const [isSelfPay, setIsSelfPay] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
-  const [contractor, setContractor] = useState(() => localStorage.getItem('fukushi_contractor') || '')
+  const [contractor, setContractor] = useState(() => readLocal('fukushi_contractor'))
   const [contractorManual, setContractorManual] = useState(false)
   const [categories, setCategories] = useState([])
   const toggleCategory = (c) =>
@@ -273,9 +262,9 @@ export default function UriageDenpyo({
   const [masterDraft, setMasterDraft] = useState(() => createMasterDraft(master))
 
   /* localStorage 永続化：一度入力した営業所・担当者・工務店は次回起動時にそのまま復元する */
-  useEffect(() => { localStorage.setItem('fukushi_staff', staff) }, [staff])
-  useEffect(() => { localStorage.setItem('fukushi_salesOffice', salesOffice) }, [salesOffice])
-  useEffect(() => { localStorage.setItem('fukushi_contractor', contractor) }, [contractor])
+  useEffect(() => { writeLocal('fukushi_staff', staff) }, [staff])
+  useEffect(() => { writeLocal('fukushi_salesOffice', salesOffice) }, [salesOffice])
+  useEffect(() => { writeLocal('fukushi_contractor', contractor) }, [contractor])
   // 未入力のときだけ、マスタ登録の先頭を補助的に採用する（既定値の設定項目は廃止）
   useEffect(() => {
     const valid = officeList.filter((n) => (n || '').trim())
@@ -849,7 +838,8 @@ export default function UriageDenpyo({
                 type="number"
                 min="0"
                 step="1"
-                value={remaining || ''}
+                // 0 を入力したときも「0」と表示する（以前は空欄に見えるのに計算・印刷では ¥0 扱いだった）
+                value={remaining === '' || remaining === null || remaining === undefined ? '' : remaining}
                 // 未入力（空欄）と 0 は区別する。値が入る場合は非負の整数だけを状態へ入れる。
                 onChange={(e) => setRemaining(e.target.value === '' ? '' : parseYen(e.target.value))}
                 placeholder="超過しそうな時のみ入力"
