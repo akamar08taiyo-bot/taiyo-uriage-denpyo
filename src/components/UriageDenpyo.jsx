@@ -271,13 +271,17 @@ export default function UriageDenpyo({
     if (!salesOffice && valid[0]) setSalesOffice(valid[0])
   }, [officeList, salesOffice])
 
-  /* サービス区分変更：明細(金額/仕切り)はクリア、基本情報・属性は維持 */
-  useEffect(() => {
+  /* サービス区分変更：明細(金額/仕切り)はクリア、基本情報・属性は維持。
+     利用者がボタンで区分を切り替えたときだけクリアする。以前は serviceType の変化を監視していたため、
+     共有リンクや受注簿連携から「特定福祉用具」の伝票を復元すると、復元した明細・残高まで消えていた。 */
+  const changeServiceType = (next) => {
+    if (next === serviceType) return
+    setServiceType(next)
     setRemaining('')
     setMiyakoChecked(false)
     setItems([newItem()])
-    if (serviceType !== 'specific') setCategories([])
-  }, [serviceType])
+    if (next !== 'specific') setCategories([])
+  }
 
   /* 受注簿「特例」セクション ⇄ 売上伝票 の双方向同期 */
   // bridge → 売上伝票（受信）
@@ -622,7 +626,7 @@ export default function UriageDenpyo({
                 { value: 'specific', label: '特定福祉用具' },
               ]}
               value={serviceType}
-              onChange={setServiceType}
+              onChange={changeServiceType}
               cols="grid-cols-2"
             />
             {serviceType === 'specific' && (
