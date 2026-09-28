@@ -48,8 +48,8 @@ const writeLocal = (key, value) => {
 let _seq = 0
 const newItem = () => ({ id: ++_seq, amount: 0, cost: 0, catalog: 'ケアマックス', productName: '', color: '' })
 const fmt = (n) => `¥${Math.round(n || 0).toLocaleString()}`
-// 税抜は切り上げ（例: 39,680 → 36,073、80,900 → 73,546）
-const exTax = (n) => Math.ceil((n || 0) / TAX)
+// 税抜は四捨五入（例: 39,680 → 36,073、80,900 → 73,545）。税の端数処理は販売受注簿（切り捨て）以外は四捨五入で統一。
+const exTax = (n) => Math.round((n || 0) / TAX)
 
 /* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている） ── */
 const PRINT_HEAD_BG = '#dbeafe'    // 表の見出し行
@@ -276,6 +276,10 @@ export default function UriageDenpyo({
      共有リンクや受注簿連携から「特定福祉用具」の伝票を復元すると、復元した明細・残高まで消えていた。 */
   const changeServiceType = (next) => {
     if (next === serviceType) return
+    // 入力済みの明細・残高が消えるため、何か入っているときは確認してから切り替える
+    const hasInput = items.some((it) => Number(it.amount) || Number(it.cost) || (it.productName || '').trim() || (it.color || '').trim())
+      || String(remaining ?? '').trim() !== ''
+    if (hasInput && !window.confirm('サービス区分を切り替えると、入力した明細（金額・仕切り・商品名）と介護保険残高がクリアされます。切り替えますか？')) return
     setServiceType(next)
     setRemaining('')
     setMiyakoChecked(false)
@@ -421,8 +425,8 @@ export default function UriageDenpyo({
   const showPrintColor = serviceType === 'specific' && hasColorInput
 
   const calc = useMemo(
-    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay }),
-    [items, total, remaining, userRatio, applyMiyako, isSelfPay]
+    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay, reimbursement: billingType === 'reimbursement' }),
+    [items, total, remaining, userRatio, applyMiyako, isSelfPay, billingType]
   )
 
   const burdenPct = Math.round(userRatio * 10)
@@ -547,6 +551,7 @@ export default function UriageDenpyo({
     ...(calc.excess > 0 ? [['超過分（実費）', calc.excess]] : []),
     [`対象内利用者負担額（${burdenLabel}・切り上げ）`, calc.userBurden],
     [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden],
+    ...(calc.refund > 0 ? [['償還払い：後日の払い戻し予定額', calc.refund]] : []),
   ]
 
   const staffOptions = staffList.filter((n) => (n || '').trim())

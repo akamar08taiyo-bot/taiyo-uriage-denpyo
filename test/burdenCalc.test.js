@@ -47,3 +47,27 @@ test('全額自費は保険対象0円・全額超過', () => {
   assert.equal(r.insuranceCovered, 0)
   assert.equal(r.totalUserBurden, 30000)
 })
+
+test('個別切り上げ＋限度額超過：超過分を利用者負担額に二重に含めない', () => {
+  // 明細 60,000円＋60,000円、残高 100,000円、1割 → 保険対象 100,000円（60,000＋40,000）
+  const r = calculate({ items: [{ amount: 60000 }, { amount: 60000 }], total: 120000, remaining: 100000, userRatio: 0.1, miyako: true, isSelfPay: false })
+  assert.equal(r.excess, 20000)
+  assert.equal(r.userBurden, 10000)
+  assert.equal(r.insurerBurden, 90000)
+  assert.equal(r.totalUserBurden, 30000)
+})
+
+test('個別切り上げ：超過がなければ従来どおり明細ごとに切り上げ', () => {
+  const r = calculate({ items: [{ amount: 12345 }, { amount: 6789 }], total: 19134, remaining: '', userRatio: 0.1, miyako: true, isSelfPay: false })
+  assert.equal(r.userBurden, 1235 + 679)
+  assert.equal(r.userBurden + r.insurerBurden, 19134)
+})
+
+test('償還払いはご利用者お支払い合計＝総合計、保険者負担分は後日の払い戻し', () => {
+  const r = calculate({ items: [{ amount: 150000 }], total: 150000, remaining: 100000, userRatio: 0.1, miyako: false, isSelfPay: false, reimbursement: true })
+  assert.equal(r.totalUserBurden, 150000)
+  assert.equal(r.refund, 90000)
+  const r2 = calculate({ items: [{ amount: 150000 }], total: 150000, remaining: 100000, userRatio: 0.1, miyako: false, isSelfPay: false, reimbursement: false })
+  assert.equal(r2.totalUserBurden, 60000)
+  assert.equal(r2.refund, 0)
+})
