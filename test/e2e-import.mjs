@@ -164,7 +164,7 @@ const specific = {
   await ctx.close()
 }
 
-// ⑤ メール作成（PDF付き）：パソコンでは Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
+// ⑤ PDFでメール：パソコンでは Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
 //    「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）
 {
   const { ctx, page } = await open({ width: 1366, height: 900 }, specific)
@@ -174,7 +174,7 @@ const specific = {
   await page.getByLabel('メールの CC').fill('kanri@example.co.jp')
   await page.screenshot({ path: `${out}/05-mail-settings.png` })
   await page.getByRole('button', { name: '保存して反映' }).click()
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'メール作成（PDF付き）' }).click()])
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDFでメール' }).click()])
   assert.equal(dl.suggestedFilename(), '売上伝票発行のご依頼 見本 花子様.eml')
   await dl.saveAs(`${out}/mail.eml`)
   const eml = readFileSync(await dl.path(), 'latin1')
@@ -203,4 +203,4 @@ const specific = {
 
 await browser.close()
 server.close()
-console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → メール作成（PDF付き）')
+console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → PDFでメール')

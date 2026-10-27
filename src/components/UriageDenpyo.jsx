@@ -128,7 +128,7 @@ const createMasterDraft = (master) => ({
   mailCc: master?.mailCc || '',
 })
 
-/** メール作成（PDF付き）の本文 */
+/** PDFでメールの本文 */
 function mailBody({ customerName, serviceType, issueDate, staff, url }) {
   return [
     'お疲れ様です。',
@@ -203,7 +203,7 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
             />
           </section>
         </div>
-        {/* メール作成（PDF付き）の宛先。空なら Outlook で入れる（ユーザーの話「送り先は、後で自分で設定する」2026-10-27） */}
+        {/* PDFでメールの宛先。空なら Outlook で入れる（ユーザーの話「送り先は、後で自分で設定する」2026-10-27） */}
         <div className="grid gap-5 px-5 pb-5 md:grid-cols-2">
           <section>
             <label className={fieldLabel} htmlFor="master-mail-to">メールの宛先</label>
@@ -548,7 +548,7 @@ export default function UriageDenpyo({
     const copied = await writeClipboard(longUrl)
     setShareMsg(copied ? '共有URLをクリップボードにコピーしました。' : '共有URLを下に表示しました。')
   }
-  /* メール作成（PDF付き）：伝票の PDF を付け、本文を入れた下書きのメールをワンタッチで作る（ユーザーの依頼 2026-10-27
+  /* PDFでメール：伝票の PDF を付け、本文を入れた下書きのメールをワンタッチで作る（ユーザーの依頼 2026-10-27
      「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）。
      パソコンは Outlook で開く下書き（.eml）、スマホ・iPad は共有メニュー（../lib/mailDraft.js）。宛先はマスタ設定（なければ Outlook で入れる） */
   async function createMail() {
@@ -672,7 +672,7 @@ export default function UriageDenpyo({
         )}
         <div className="bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 px-3 py-2 flex flex-wrap items-center gap-2">
           <span className="text-base font-extrabold text-sky-800">操作:</span>
-          <button type="button" onClick={createMail} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">メール作成（PDF付き）</button>
+          <button type="button" onClick={createMail} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">PDFでメール</button>
           <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
           <button type="button" onClick={copyShareLink} className="h-11 px-4 rounded-xl text-base font-extrabold bg-sky-600 text-white shadow-sm shadow-sky-200 hover:brightness-[.98]">共有リンク</button>
           <button type="button" onClick={openMasterSettings} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">マスタ設定</button>
