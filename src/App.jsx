@@ -7,7 +7,7 @@ const DEFAULT_MASTER = {
   offices: [],
   salesPersons: [],
   contractors: [],
-  // PDFでメールの宛先・CC（ユーザーが「送り先は、後で自分で設定する」2026-10-27。空なら Outlook で入れる）
+  // PDFでメールの宛先・CC（ユーザーが「送り先は、後で自分で設定する」2026-10-27。空ならメールのソフトで入れる）
   mailTo: '',
   mailCc: '',
 }

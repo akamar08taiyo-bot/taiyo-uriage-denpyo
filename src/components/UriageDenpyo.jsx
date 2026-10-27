@@ -203,7 +203,7 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
             />
           </section>
         </div>
-        {/* PDFでメールの宛先。空なら Outlook で入れる（ユーザーの話「送り先は、後で自分で設定する」2026-10-27） */}
+        {/* PDFでメールの宛先。空ならメールのソフト（Thunderbird・Outlook）で入れる（ユーザーの話「送り先は、後で自分で設定する」2026-10-27） */}
         <div className="grid gap-5 px-5 pb-5 md:grid-cols-2">
           <section>
             <label className={fieldLabel} htmlFor="master-mail-to">メールの宛先</label>
@@ -550,7 +550,7 @@ export default function UriageDenpyo({
   }
   /* PDFでメール：伝票の PDF を付け、本文を入れた下書きのメールをワンタッチで作る（ユーザーの依頼 2026-10-27
      「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）。
-     パソコンは Outlook で開く下書き（.eml）、スマホ・iPad は共有メニュー（../lib/mailDraft.js）。宛先はマスタ設定（なければ Outlook で入れる） */
+     パソコンは Thunderbird・Outlook で開く下書き（.eml）、スマホ・タブレットは共有メニュー（../lib/mailDraft.js）。宛先はマスタ設定（なければメールのソフトで入れる） */
   async function createMail() {
     setTriedPrint(true)
     if (!canPrint) { setShareMsg('入力に不足または誤りがあるためメールを作成できません。'); return }

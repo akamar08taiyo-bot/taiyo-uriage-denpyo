@@ -1,4 +1,4 @@
-// メールの下書き（.eml）：Outlook で開くと、件名・本文・添付の入った送信前のメールになる形か（ユーザーの依頼 2026-10-27）
+// メールの下書き（.eml）：Thunderbird・Outlook で開くと、件名・本文・添付の入った送信前のメールになる形か（ユーザーの依頼 2026-10-27）
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { addressList, buildEml, encodeWord, isMobileDevice, safeFileName } from '../src/lib/mailDraft.js'
@@ -37,7 +37,7 @@ test('下書きのメール：宛先・件名・X-Unsent・本文・添付（PDF
   assert.ok(eml.endsWith('--BOUNDARY--\r\n'))
 })
 
-test('宛先がなければ To・Cc の行を書かない（Outlook で入れる）', () => {
+test('宛先がなければ To・Cc の行を書かない（メールのソフトで入れる）', () => {
   const eml = buildEml({ subject: 'a', body: 'b', attachments: [], boundary: 'B' })
   assert.match(eml, /^Subject: a\r\n/)
   assert.ok(!/^To:/m.test(eml) && !/^Cc:/m.test(eml))
@@ -51,4 +51,10 @@ test('宛先の読み方・件名の英数字はそのまま・ファイル名�
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }), true)
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 5 }), true) // iPad
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', maxTouchPoints: 0 }), false)
+  // Android のタブレット：「PC版サイト」の表示では Linux のパソコンの名前で来る（指で触れる画面で見分ける）
+  assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710)' }), true)
+  assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36', maxTouchPoints: 10 }), true)
+  assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', maxTouchPoints: 0, userAgentData: { platform: 'Android' } }), true)
+  // Windows のパソコンは指で触れる画面でも下書きのファイル（共有メニューに Thunderbird が出ないので）
+  assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', maxTouchPoints: 10 }), false)
 })

@@ -33,8 +33,9 @@ const base = `http://localhost:${port}/taiyo-uriage-denpyo/`
 const browser = await chromium.launch({ env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' } })
 const KEY = 'taiyo-uriage-import-v1'
 
-async function open(viewport, request, hash = '') {
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1 })
+async function open(viewport, request, hash = '', device = {}) {
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1, ...device.context })
+  if (device.init) await ctx.addInitScript(...device.init)
   await ctx.route(/^https?:\/\/(?!localhost)/, (route) => {
     if (tw && /^https:\/\/cdn\.tailwindcss\.com/.test(route.request().url())) {
       return route.fulfill({ status: 200, contentType: 'text/javascript', body: `(() => { const s = document.createElement('style'); s.textContent = ${JSON.stringify(tw)}; document.head.appendChild(s); })();` })
@@ -164,7 +165,7 @@ const specific = {
   await ctx.close()
 }
 
-// ⑤ PDFでメール：パソコンでは Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
+// ⑤ PDFでメール：パソコンでは Thunderbird・Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
 //    「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）
 {
   const { ctx, page } = await open({ width: 1366, height: 900 }, specific)
@@ -201,6 +202,54 @@ const specific = {
   await ctx.close()
 }
 
+// ⑥ タブレット（ユーザーの話「タブレットからもおくります」）：PDFでメールは共有メニュー（メールのアプリ）に PDF と件名・本文を渡す。
+//    iPad（名前はパソコンの Mac と同じ）と、Android のタブレットの「PC版サイト」の表示（名前は Linux のパソコン）。
+//    PDF を作っているあいだに押した操作の続きと見なされなくなった（iPad の Safari など）ときは「📤 メールのアプリに渡す」をもう一度押す
+{
+  // 共有メニューのかわり：渡されたものを覚える。notAllowed 回だけ「押した操作の続きではない」と断る
+  const shareStub = (notAllowed) => {
+    Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 5 })
+    window.__shared = []
+    let refuse = notAllowed
+    navigator.canShare = (d) => !!d?.files?.length
+    navigator.share = async (d) => {
+      if (refuse-- > 0) throw new DOMException('not allowed', 'NotAllowedError')
+      const files = await Promise.all(d.files.map(async (f) => ({ name: f.name, type: f.type, head: new TextDecoder().decode((await f.arrayBuffer()).slice(0, 5)) })))
+      window.__shared.push({ title: d.title, text: d.text, files })
+    }
+  }
+  const tablets = [
+    ['ipad', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', 0],
+    ['android', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36', 1],
+  ]
+  for (const [name, userAgent, refuse] of tablets) {
+    const { ctx, page } = await open({ width: 1180, height: 820 }, specific, '', { context: { userAgent, hasTouch: true }, init: [shareStub, refuse] })
+    await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
+    let downloaded = false
+    page.on('download', () => (downloaded = true))
+    await page.getByRole('button', { name: 'PDFでメール' }).click()
+    if (refuse) {
+      const again = page.getByRole('dialog', { name: 'メールのアプリに渡す' })
+      await again.waitFor()
+      await page.screenshot({ path: `${out}/06-mail-tablet-tap.png` })
+      await again.getByRole('button', { name: '📤 メールのアプリに渡す' }).click()
+      await again.waitFor({ state: 'detached' })
+    }
+    await page.getByText('メールのアプリに渡しました。').waitFor()
+    const shared = await page.evaluate(() => window.__shared)
+    assert.equal(shared.length, 1, name)
+    assert.equal(shared[0].title, '売上伝票発行のご依頼 見本 花子様')
+    for (const t of ['添付の通り、売上伝票の発行をお願いいたします。', '顧客名：見本 花子 様']) assert.ok(shared[0].text.includes(t), shared[0].text)
+    assert.equal(shared[0].files.length, 1)
+    assert.match(shared[0].files[0].name, /\.pdf$/)
+    assert.equal(shared[0].files[0].type, 'application/pdf')
+    assert.equal(shared[0].files[0].head, '%PDF-')
+    assert.equal(downloaded, false, `${name}：下書きのファイルは保存しない`)
+    await page.screenshot({ path: `${out}/06-mail-tablet-${name}.png` })
+    await ctx.close()
+  }
+}
+
 await browser.close()
 server.close()
-console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → PDFでメール')
+console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → PDFでメール（パソコン・タブレット）')
