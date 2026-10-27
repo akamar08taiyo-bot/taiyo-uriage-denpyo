@@ -2,8 +2,12 @@ function safeFileName(value) {
   return String(value || '売上伝票発行依頼書').replace(/[\\/:*?"<>|]/g, '_')
 }
 
-// 画面上は非表示（print:block）の帳票を、印刷と同じ見た目のままA4縦1枚のPDFにする。
-export async function downloadDenpyoPdf({ customerName, issueDate }) {
+export function denpyoPdfName({ customerName, issueDate }) {
+  return safeFileName(`${issueDate || ''}_${customerName || ''}_売上伝票発行依頼書.pdf`)
+}
+
+// 画面上は非表示（print:block）の帳票を、印刷と同じ見た目のままA4縦1枚のPDFにする（jsPDF を返す。保存・メールの添付で使う）。
+export async function buildDenpyoPdf() {
   const source = document.querySelector('.uriage-print')
   if (!source) throw new Error('PDFにする帳票が見つかりませんでした。')
 
@@ -32,8 +36,19 @@ export async function downloadDenpyoPdf({ customerName, issueDate }) {
     const imageWidth = canvas.width * ratio
     const imageHeight = canvas.height * ratio
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', (pageWidth - imageWidth) / 2, margin, imageWidth, imageHeight, undefined, 'FAST')
-    pdf.save(safeFileName(`${issueDate || ''}_${customerName || ''}_売上伝票発行依頼書.pdf`))
+    return pdf
   } finally {
     sandbox.remove()
   }
+}
+
+export async function downloadDenpyoPdf({ customerName, issueDate }) {
+  const pdf = await buildDenpyoPdf()
+  pdf.save(denpyoPdfName({ customerName, issueDate }))
+}
+
+/** メールの添付にする PDF（{name, type, bytes}） */
+export async function denpyoPdfAttachment({ customerName, issueDate }) {
+  const pdf = await buildDenpyoPdf()
+  return { name: denpyoPdfName({ customerName, issueDate }), type: 'application/pdf', bytes: new Uint8Array(pdf.output('arraybuffer')) }
 }

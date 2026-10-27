@@ -7,6 +7,9 @@ const DEFAULT_MASTER = {
   offices: [],
   salesPersons: [],
   contractors: [],
+  // メール作成（PDF付き）の宛先・CC（ユーザーが「送り先は、後で自分で設定する」2026-10-27。空なら Outlook で入れる）
+  mailTo: '',
+  mailCc: '',
 }
 
 const DEFAULT_BRIDGE = {
@@ -30,6 +33,8 @@ function loadMaster() {
       offices: cleanList(saved.offices),
       salesPersons: cleanList(saved.salesPersons),
       contractors: cleanList(saved.contractors),
+      mailTo: typeof saved.mailTo === 'string' ? saved.mailTo : '',
+      mailCc: typeof saved.mailCc === 'string' ? saved.mailCc : '',
     }
   } catch {
     return DEFAULT_MASTER

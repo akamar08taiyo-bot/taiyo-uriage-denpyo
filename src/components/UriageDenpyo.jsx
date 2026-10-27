@@ -124,7 +124,25 @@ const createMasterDraft = (master) => ({
   offices: (master?.offices || []).join('\n'),
   salesPersons: (master?.salesPersons || []).join('\n'),
   contractors: (master?.contractors || []).join('\n'),
+  mailTo: master?.mailTo || '',
+  mailCc: master?.mailCc || '',
 })
+
+/** メール作成（PDF付き）の本文 */
+function mailBody({ customerName, serviceType, issueDate, staff, url }) {
+  return [
+    'お疲れ様です。',
+    '添付の通り、売上伝票の発行をお願いいたします。',
+    '',
+    `顧客名：${customerName ? `${customerName} 様` : ''}`,
+    `サービス区分：${serviceType === 'specific' ? '特定福祉用具' : '住宅改修'}`,
+    `施工（納品予定日）：${issueDate || ''}`,
+    `担当者：${staff || ''}`,
+    '',
+    ...(url ? ['入力画面（同じ伝票を開けます）：', url, ''] : []),
+    'よろしくお願いいたします。',
+  ].join('\n')
+}
 
 function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
   return (
@@ -182,6 +200,32 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
               onChange={(event) => onChange({ ...draft, contractors: event.target.value })}
               className={`${inputCore} min-h-40 resize-y py-2 text-base leading-7`}
               placeholder={'○○工務店\n△△建設'}
+            />
+          </section>
+        </div>
+        {/* メール作成（PDF付き）の宛先。空なら Outlook で入れる（ユーザーの話「送り先は、後で自分で設定する」2026-10-27） */}
+        <div className="grid gap-5 px-5 pb-5 md:grid-cols-2">
+          <section>
+            <label className={fieldLabel} htmlFor="master-mail-to">メールの宛先</label>
+            <input
+              id="master-mail-to"
+              type="text"
+              inputMode="email"
+              value={draft.mailTo}
+              onChange={(event) => onChange({ ...draft, mailTo: event.target.value })}
+              className={`${inputCore} h-11 text-base`}
+              placeholder="例: jimu@example.co.jp（いくつかはカンマで区切る）"
+            />
+          </section>
+          <section>
+            <label className={fieldLabel} htmlFor="master-mail-cc">メールの CC</label>
+            <input
+              id="master-mail-cc"
+              type="text"
+              inputMode="email"
+              value={draft.mailCc}
+              onChange={(event) => onChange({ ...draft, mailCc: event.target.value })}
+              className={`${inputCore} h-11 text-base`}
             />
           </section>
         </div>
@@ -504,15 +548,29 @@ export default function UriageDenpyo({
     const copied = await writeClipboard(longUrl)
     setShareMsg(copied ? '共有URLをクリップボードにコピーしました。' : '共有URLを下に表示しました。')
   }
-  function createMail() {
+  /* メール作成（PDF付き）：伝票の PDF を付け、本文を入れた下書きのメールをワンタッチで作る（ユーザーの依頼 2026-10-27
+     「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）。
+     パソコンは Outlook で開く下書き（.eml）、スマホ・iPad は共有メニュー（../lib/mailDraft.js）。宛先はマスタ設定（なければ Outlook で入れる） */
+  async function createMail() {
     setTriedPrint(true)
     if (!canPrint) { setShareMsg('入力に不足または誤りがあるためメールを作成できません。'); return }
-    // メール用は短縮しない長いURLをそのまま使用
-    const longUrl = buildLongShareUrl()
-    setShareUrl(longUrl)
-    const subject = `売上伝票発行のご依頼 ${customerName || ''}`.trim()
-    const body = `お疲れ様です。\n下記URLの通り、売上伝票の発行をお願いいたします。\n\n${longUrl}\n`
-    location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    setPdfBusy(true)
+    setShareMsg('')
+    try {
+      // 本文には、受け取った人が同じ伝票を開ける長いURLも付ける（前のメール作成と同じ）
+      const longUrl = buildLongShareUrl()
+      setShareUrl(longUrl)
+      const [{ denpyoPdfAttachment }, { addressList, sendMailDraft }] = await Promise.all([import('../pdf-export.js'), import('../lib/mailDraft.js')])
+      const attachment = await denpyoPdfAttachment({ customerName, issueDate })
+      const subject = `売上伝票発行のご依頼 ${customerName ? `${customerName}様` : ''}`.trim()
+      const body = mailBody({ customerName, serviceType, issueDate, staff, url: longUrl })
+      const how = await sendMailDraft({ to: addressList(master?.mailTo), cc: addressList(master?.mailCc), subject, body, attachment })
+      setShareMsg(how === 'eml' ? 'メールの下書きを保存しました（開くと PDF 付きのメール）。' : how === 'shared' ? 'メールのアプリに渡しました。' : '')
+    } catch (error) {
+      setShareMsg(error?.message || 'メールを作成できませんでした。')
+    } finally {
+      setPdfBusy(false)
+    }
   }
 
   function openMasterSettings() {
@@ -526,6 +584,8 @@ export default function UriageDenpyo({
       offices: normalizeMasterLines(masterDraft.offices),
       salesPersons: normalizeMasterLines(masterDraft.salesPersons),
       contractors: normalizeMasterLines(masterDraft.contractors),
+      mailTo: String(masterDraft.mailTo || '').trim(),
+      mailCc: String(masterDraft.mailCc || '').trim(),
     }))
     setShowMasterSettings(false)
     setShareMsg('マスタ設定を保存しました。')
@@ -612,7 +672,7 @@ export default function UriageDenpyo({
         )}
         <div className="bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 px-3 py-2 flex flex-wrap items-center gap-2">
           <span className="text-base font-extrabold text-sky-800">操作:</span>
-          <button type="button" onClick={createMail} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">メール作成</button>
+          <button type="button" onClick={createMail} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">メール作成（PDF付き）</button>
           <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
           <button type="button" onClick={copyShareLink} className="h-11 px-4 rounded-xl text-base font-extrabold bg-sky-600 text-white shadow-sm shadow-sky-200 hover:brightness-[.98]">共有リンク</button>
           <button type="button" onClick={openMasterSettings} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">マスタ設定</button>

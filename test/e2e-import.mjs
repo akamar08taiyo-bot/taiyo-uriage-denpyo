@@ -164,6 +164,43 @@ const specific = {
   await ctx.close()
 }
 
+// ⑤ メール作成（PDF付き）：パソコンでは Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
+//    「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）
+{
+  const { ctx, page } = await open({ width: 1366, height: 900 }, specific)
+  await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
+  await page.getByRole('button', { name: 'マスタ設定' }).click()
+  await page.getByLabel('メールの宛先').fill('jimu@example.co.jp')
+  await page.getByLabel('メールの CC').fill('kanri@example.co.jp')
+  await page.screenshot({ path: `${out}/05-mail-settings.png` })
+  await page.getByRole('button', { name: '保存して反映' }).click()
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'メール作成（PDF付き）' }).click()])
+  assert.equal(dl.suggestedFilename(), '売上伝票発行のご依頼 見本 花子様.eml')
+  await dl.saveAs(`${out}/mail.eml`)
+  const eml = readFileSync(await dl.path(), 'latin1')
+  const head = eml.split('\r\n\r\n')[0]
+  assert.match(head, /^To: jimu@example\.co\.jp\r\nCc: kanri@example\.co\.jp\r\n/)
+  assert.match(head, /\r\nX-Unsent: 1\r\n/)
+  const b64 = (s) => Buffer.from(s.replace(/\r\n/g, ''), 'base64')
+  const boundary = /boundary="([^"]+)"/.exec(head)[1]
+  const parts = eml.split(`--${boundary}`).slice(1, -1).map((p) => p.replace(/^\r\n/, ''))
+  assert.equal(parts.length, 2)
+  const body = b64(parts[0].split('\r\n\r\n')[1]).toString('utf8')
+  for (const t of ['添付の通り、売上伝票の発行をお願いいたします。', '顧客名：見本 花子 様', 'サービス区分：特定福祉用具', '施工（納品予定日）：2026-10-30']) assert.ok(body.includes(t), body)
+  const [fileHead, fileData] = parts[1].split('\r\n\r\n')
+  assert.match(fileHead, /Content-Type: application\/pdf/)
+  const pdf = b64(fileData)
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-')
+  assert.ok(pdf.length > 20000, String(pdf.length))
+  await page.getByText('メールの下書きを保存しました（開くと PDF 付きのメール）。').waitFor()
+  await page.screenshot({ path: `${out}/05-mail.png` })
+  // 読み直しても宛先は覚えている
+  await page.reload()
+  await page.getByRole('button', { name: 'マスタ設定' }).click()
+  assert.equal(await page.getByLabel('メールの宛先').inputValue(), 'jimu@example.co.jp')
+  await ctx.close()
+}
+
 await browser.close()
 server.close()
-console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク')
+console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → メール作成（PDF付き）')
