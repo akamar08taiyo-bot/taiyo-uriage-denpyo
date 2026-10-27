@@ -3,6 +3,8 @@ import { printDoc } from '../print.js'
 import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeClipboard } from '../share.js'
 import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
+import { calculate, ratioTenths } from '../lib/denpyoCalc.js'
+import { openedFromShinsei, takeImportRequest } from '../lib/importRequest.js'
 
 /* ── 定数 ─────────────────────────────────── */
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
@@ -42,25 +44,7 @@ const fmt = (n) => `¥${Math.round(n || 0).toLocaleString()}`
 // 税抜は切り上げ（例: 39,680 → 36,073、80,900 → 73,546）
 const exTax = (n) => Math.ceil((n || 0) / TAX)
 
-/* ── 計算ロジック ────────────────────────────── */
-function calculate({ items, total, remaining, userRatio, miyako, isSelfPay }) {
-  const insuranceRatio = 1 - userRatio
-  // 介護保険残高が未入力（空欄）のときは支給限度額の超過なしとして計算する。
-  // 超過しそうな場合だけ残高を入力してもらう運用に合わせている。
-  const hasRemaining = remaining !== '' && remaining !== null && remaining !== undefined
-  const effRemaining = isSelfPay ? 0 : (hasRemaining ? Number(remaining) || 0 : total)
-  const insuranceCovered = Math.min(total, effRemaining)
-  const excess = Math.max(0, total - effRemaining)
-  let userBurden, insurerBurden
-  if (miyako) {
-    userBurden = items.reduce((s, it) => s + Math.ceil(it.amount * userRatio), 0)
-    insurerBurden = Math.max(0, insuranceCovered - userBurden)
-  } else {
-    userBurden = Math.ceil(insuranceCovered * userRatio)
-    insurerBurden = Math.floor(insuranceCovered * insuranceRatio)
-  }
-  return { total, insuranceCovered, excess, userBurden, insurerBurden, totalUserBurden: userBurden + excess }
-}
+/* 計算ロジックは ../lib/denpyoCalc.js（生活保護・整数の負担割合） */
 
 /* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている） ── */
 const PRINT_HEAD_BG = '#dbeafe'    // 表の見出し行
@@ -262,6 +246,8 @@ export default function UriageDenpyo({
   const [staff, setStaff] = useState(() => localStorage.getItem('fukushi_staff') || '')
   const [triedPrint, setTriedPrint] = useState(false)
   const [isSelfPay, setIsSelfPay] = useState(false)
+  // 生活保護（介護扶助）：自己負担は出さず、負担割合の分は「介護扶助」として出す
+  const [welfare, setWelfare] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [contractor, setContractor] = useState(() => localStorage.getItem('fukushi_contractor') || '')
   const [contractorManual, setContractorManual] = useState(false)
@@ -284,13 +270,17 @@ export default function UriageDenpyo({
     if (!salesOffice && valid[0]) setSalesOffice(valid[0])
   }, [officeList, salesOffice])
 
-  /* サービス区分変更：明細(金額/仕切り)はクリア、基本情報・属性は維持 */
-  useEffect(() => {
+  /* サービス区分変更：明細(金額/仕切り)はクリア、基本情報・属性は維持。
+     前は serviceType が変わるたびに useEffect で消していたため、共有リンク・申請書・見積書作成から
+     特定福祉用具の伝票を開くと、入れた明細・残高がすぐ消えていた → 画面のボタンで切り替えたときだけ消す */
+  const changeServiceType = (next) => {
+    if (next === serviceType) return
+    setServiceType(next)
     setRemaining('')
     setMiyakoChecked(false)
     setItems([newItem()])
-    if (serviceType !== 'specific') setCategories([])
-  }, [serviceType])
+    if (next !== 'specific') setCategories([])
+  }
 
   /* 受注簿「特例」セクション ⇄ 売上伝票 の双方向同期 */
   // bridge → 売上伝票（受信）
@@ -380,15 +370,12 @@ export default function UriageDenpyo({
 
   // 基本情報は input の onChange から直接 setBridge を呼ぶため、push useEffect は不要
 
-  /* 共有リンクから状態復元 */
-  useEffect(() => {
-    const payload = decodePayload(readPayloadFromHash('uriage'))
-    const s = payload?.sales
-    if (!s) return
+  /* 共有リンク・申請書・見積書作成から受け取った内容を入れる */
+  const applySales = (s) => {
     if (s.serviceType) setServiceType(s.serviceType)
     // 共有URLは外部から編集できるため、実在する日付のときだけ採用する
     if (isValidDateString(s.issueDate)) setIssueDate(s.issueDate)
-    if (typeof s.salesOffice === 'string') setSalesOffice(s.salesOffice)
+    if (typeof s.salesOffice === 'string' && s.salesOffice) setSalesOffice(s.salesOffice)
     if (typeof s.customerName === 'string') setCustomerName(s.customerName)
     if (typeof s.customerAddress === 'string') setCustomerAddress(s.customerAddress)
     if (typeof s.officeName === 'string') setOfficeName(s.officeName)
@@ -397,18 +384,41 @@ export default function UriageDenpyo({
     if (s.billingType) setBillingType(s.billingType)
     if (s.careLevel) setCareLevel(s.careLevel)
     if (typeof s.userRatio === 'number') setUserRatio(s.userRatio)
-    if (typeof s.remaining === 'number') setRemaining(s.remaining)
+    setRemaining(typeof s.remaining === 'number' ? s.remaining : '')
     if (Array.isArray(s.items) && s.items.length) {
-      setItems(s.items.map((it) => ({ ...newItem(), ...it })))
+      setItems(s.items.map((it) => ({ ...newItem(), ...it, id: ++_seq })))
     }
     if (typeof s.miyakoChecked === 'boolean') setMiyakoChecked(s.miyakoChecked)
     if (typeof s.showExTax === 'boolean') setShowExTax(s.showExTax)
-    if (typeof s.staff === 'string') setStaff(s.staff)
+    if (typeof s.staff === 'string' && s.staff) setStaff(s.staff)
     if (typeof s.isSelfPay === 'boolean') setIsSelfPay(s.isSelfPay)
+    setWelfare(s.welfare === true)
     if (typeof s.showDetail === 'boolean') setShowDetail(s.showDetail)
-    if (typeof s.contractor === 'string') setContractor(s.contractor)
+    if (typeof s.contractor === 'string' && s.contractor) setContractor(s.contractor)
     if (Array.isArray(s.categories)) setCategories(s.categories)
     else if (typeof s.category === 'string' && s.category) setCategories([s.category])
+  }
+
+  useEffect(() => {
+    // 申請書・見積書作成の「🧾 売上伝票」から（この端末の中で受け取る。../lib/importRequest.js）
+    if (openedFromShinsei(location.search)) {
+      const s = takeImportRequest(localStorage)
+      // 読み直したときにもう一度読まないよう、?from= を外す
+      try {
+        history.replaceState(null, '', `${location.pathname}${location.hash}`)
+      } catch {
+        // 外せなくても、依頼は消してあるので二度は入らない
+      }
+      if (s) {
+        applySales(s)
+        setShareMsg('申請書・見積書作成から読み込みました。')
+        return
+      }
+    }
+    const payload = decodePayload(readPayloadFromHash('uriage'))
+    const s = payload?.sales
+    if (!s) return
+    applySales(s)
     setShareMsg('共有リンクから内容を読み込みました。')
     setShareUrl(location.href)
   }, [])
@@ -430,11 +440,11 @@ export default function UriageDenpyo({
   const showPrintColor = serviceType === 'specific' && hasColorInput
 
   const calc = useMemo(
-    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay }),
-    [items, total, remaining, userRatio, applyMiyako, isSelfPay]
+    () => calculate({ items, total, remaining, userRatio, miyako: applyMiyako, isSelfPay, welfare }),
+    [items, total, remaining, userRatio, applyMiyako, isSelfPay, welfare]
   )
 
-  const burdenPct = Math.round(userRatio * 10)
+  const burdenPct = ratioTenths(userRatio)
   const insurancePct = 10 - burdenPct
   const burdenLabel = `${burdenPct}割`
   const insuranceLabel = `${insurancePct}割`
@@ -478,7 +488,7 @@ export default function UriageDenpyo({
     return {
       serviceType, issueDate, salesOffice, customerName, customerAddress, officeName, careManager,
       customerType, billingType, careLevel, userRatio, remaining,
-      items, miyakoChecked, showExTax, staff, isSelfPay, showDetail, contractor, categories,
+      items, miyakoChecked, showExTax, staff, isSelfPay, welfare, showDetail, contractor, categories,
       total, totalUserBurden: calc.totalUserBurden,
     }
   }
@@ -539,6 +549,7 @@ export default function UriageDenpyo({
     setShowExTax(false)
     setTriedPrint(false)
     setIsSelfPay(false)
+    setWelfare(false)
     setShowDetail(false)
     setContractor('')
     setContractorManual(false)
@@ -554,7 +565,10 @@ export default function UriageDenpyo({
     ...(hasCost ? [['仕切り合計（税込）', totalCost]] : []),
     ['保険対象金額', calc.insuranceCovered],
     ...(calc.excess > 0 ? [['超過分（実費）', calc.excess]] : []),
-    [`対象内利用者負担額（${burdenLabel}・切り上げ）`, calc.userBurden],
+    // 生活保護は自己負担を出さず、負担割合の分を介護扶助として出す
+    welfare
+      ? [`介護扶助（生活保護・${burdenLabel}・切り上げ）`, calc.aid]
+      : [`対象内利用者負担額（${burdenLabel}・切り上げ）`, calc.userBurden],
     [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden],
   ]
 
@@ -635,7 +649,7 @@ export default function UriageDenpyo({
                 { value: 'specific', label: '特定福祉用具' },
               ]}
               value={serviceType}
-              onChange={setServiceType}
+              onChange={changeServiceType}
               cols="grid-cols-2"
             />
             {serviceType === 'specific' && (
@@ -832,6 +846,14 @@ export default function UriageDenpyo({
                   className="w-5 h-5 rounded"
                 />
                 <label htmlFor="selfpay" className="text-base font-bold text-slate-600">全額自費</label>
+                <input
+                  type="checkbox"
+                  id="welfare"
+                  checked={welfare}
+                  onChange={(e) => setWelfare(e.target.checked)}
+                  className="ml-5 w-5 h-5 rounded"
+                />
+                <label htmlFor="welfare" className="text-base font-bold text-slate-600">生活保護</label>
               </div>
             </div>
           </div>
@@ -1120,7 +1142,7 @@ export default function UriageDenpyo({
           </tr>
           <tr>
             <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>負担割合</th>
-            <td className="border border-slate-500 px-2 py-1">{burdenLabel}</td>
+            <td className="border border-slate-500 px-2 py-1">{burdenLabel}{welfare ? '（生活保護）' : ''}</td>
             <th className="border border-slate-500 px-1.5 py-1 text-left text-[10px] leading-tight" style={{ background: PRINT_LABEL_BG }}>介護保険残額</th>
             <td className="border border-slate-500 px-2 py-1">{remaining === '' || remaining === null || remaining === undefined ? '—（超過なし）' : fmt(remaining)}</td>
           </tr>
@@ -1207,7 +1229,7 @@ export default function UriageDenpyo({
         </thead>
         <tbody>
           {resultRows.map(([label, val]) => {
-            const highlight = label.includes('利用者負担額') || label.includes('保険者負担額')
+            const highlight = label.includes('利用者負担額') || label.includes('介護扶助') || label.includes('保険者負担額')
             const hlStyle = highlight ? { background: PRINT_MARK_BG } : undefined
             return (
               <tr key={label}>
