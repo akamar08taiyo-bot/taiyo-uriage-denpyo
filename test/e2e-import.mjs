@@ -103,22 +103,30 @@ const specific = {
   await ctx.close()
 }
 
-// ② 生活保護：自己負担は出さず、介護扶助として出す（画面・印刷とも）
+// ② 生活保護：自己負担は出さず、負担割合の分を「対象内利用者負担額（生活保護・…）」として出す（画面・印刷とも。「介護扶助」とは書かない＝ユーザーの指示 2026-10-28）
 {
   const { ctx, page } = await open({ width: 390, height: 844 }, { ...specific, userRatio: 0.1, welfare: true })
   await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
   assert.equal(await page.getByLabel('生活保護').isChecked(), true)
   const text = await page.locator('main').innerText()
-  assert.ok(!text.includes('対象内利用者負担額'), text)
-  assert.match(text, /介護扶助（生活保護・1割・切り上げ）\s*¥3,968/)
+  assert.ok(!text.includes('介護扶助'), text)
+  assert.match(text, /対象内利用者負担額（生活保護・1割・切り上げ）\s*¥3,968/)
   assert.match(text, /ご利用者お支払い合計\s*¥0/)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390)
   await page.screenshot({ path: `${out}/02-welfare-sp.png`, fullPage: true })
   await page.emulateMedia({ media: 'print' })
   const print = await page.locator('.uriage-print').innerText()
   assert.match(print, /1割（生活保護）/)
-  assert.match(print, /介護扶助（生活保護・1割・切り上げ）/)
-  assert.ok(!print.includes('対象内利用者負担額'))
+  assert.match(print, /対象内利用者負担額（生活保護・1割・切り上げ）/)
+  assert.ok(!print.includes('介護扶助'))
+  // 印刷の黄色は保険者負担額の行だけ（利用者負担額の行の項目名・税込は黄色くしない。ユーザーの指示「1割の税込の部分は黄色くしなくてもよい」）
+  const bgs = await page.locator('.uriage-print tr', { hasText: '負担額' }).evaluateAll((rows) =>
+    rows.map((r) => [r.cells[0].textContent.trim(), getComputedStyle(r.cells[0]).backgroundColor, getComputedStyle(r.cells[1]).backgroundColor]),
+  )
+  assert.deepEqual(bgs, [
+    ['対象内利用者負担額（生活保護・1割・切り上げ）', 'rgb(236, 253, 245)', 'rgba(0, 0, 0, 0)'],
+    ['保険者負担額（9割・切り下げ）', 'rgb(255, 243, 168)', 'rgb(255, 243, 168)'],
+  ])
   await page.screenshot({ path: `${out}/03-welfare-print.png`, fullPage: true })
   // チェックを外すと自己負担に戻る
   await page.emulateMedia({ media: 'screen' })

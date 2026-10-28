@@ -51,7 +51,7 @@ const exTax = (n) => Math.ceil((n || 0) / TAX)
 const PRINT_HEAD_BG = '#d1fae5'    // 表の見出し行
 const PRINT_LABEL_BG = '#ecfdf5'   // 項目名セル
 const PRINT_EXTAX_BG = '#fef9c3'   // 税抜の列
-const PRINT_MARK_BG = '#fff3a8'    // 利用者/保険者負担額の強調
+const PRINT_MARK_BG = '#fff3a8'    // 保険者負担額の強調（利用者負担額の行は強調しない。2026-10-28）
 const PRINT_TOTAL_BG = '#a7f3d0'   // ご利用者お支払い合計
 
 /* ── スタイル定数 ─────────────────────────────── */
@@ -295,7 +295,7 @@ export default function UriageDenpyo({
   const [staff, setStaff] = useState(() => localStorage.getItem('fukushi_staff') || '')
   const [triedPrint, setTriedPrint] = useState(false)
   const [isSelfPay, setIsSelfPay] = useState(false)
-  // 生活保護（介護扶助）：自己負担は出さず、負担割合の分は「介護扶助」として出す
+  // 生活保護：自己負担は出さず、負担割合の分（calc.aid）を「対象内利用者負担額（生活保護・1割・切り上げ）」として出す（「介護扶助」とは書かない）
   const [welfare, setWelfare] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [contractor, setContractor] = useState(() => localStorage.getItem('fukushi_contractor') || '')
@@ -624,17 +624,19 @@ export default function UriageDenpyo({
     setShareMsg('入力内容を削除しました。')
   }
 
-  /* 計算結果行 */
+  /* 計算結果行（3つめが true の行は、印刷で黄色く強調する＝保険者負担額だけ。
+     利用者負担額（1割など）の行は黄色くしない：ユーザーの指示「1割の税込の部分は黄色くしなくてもよい」2026-10-28） */
   const resultRows = [
     ['総合計（税込）', calc.total],
     ...(hasCost ? [['仕切り合計（税込）', totalCost]] : []),
     ['保険対象金額', calc.insuranceCovered],
     ...(calc.excess > 0 ? [['超過分（実費）', calc.excess]] : []),
-    // 生活保護は自己負担を出さず、負担割合の分を介護扶助として出す
+    // 生活保護は自己負担を出さず、負担割合の分（calc.aid）を出す。名前は「介護扶助」と書かず、ふだんと同じ「対象内利用者負担額」に（生活保護）を付ける
+    // （ユーザーの指示「生活保護のときは、介護扶助という文言は不要」2026-10-28）
     welfare
-      ? [`介護扶助（生活保護・${burdenLabel}・切り上げ）`, calc.aid]
+      ? [`対象内利用者負担額（生活保護・${burdenLabel}・切り上げ）`, calc.aid]
       : [`対象内利用者負担額（${burdenLabel}・切り上げ）`, calc.userBurden],
-    [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden],
+    [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden, true],
   ]
 
   const staffOptions = staffList.filter((n) => (n || '').trim())
@@ -1291,8 +1293,7 @@ export default function UriageDenpyo({
           </tr>
         </thead>
         <tbody>
-          {resultRows.map(([label, val]) => {
-            const highlight = label.includes('利用者負担額') || label.includes('介護扶助') || label.includes('保険者負担額')
+          {resultRows.map(([label, val, highlight]) => {
             const hlStyle = highlight ? { background: PRINT_MARK_BG } : undefined
             return (
               <tr key={label}>
