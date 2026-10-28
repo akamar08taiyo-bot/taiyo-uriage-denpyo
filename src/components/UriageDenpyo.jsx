@@ -656,6 +656,11 @@ export default function UriageDenpyo({
       {/* アクションバー */}
       <header className="uriage-hero text-white">
         <div className="max-w-[1500px] mx-auto px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* 業務アプリポータルへ戻るボタンは左上・題名の左（全アプリ共通の形 .taiyo-portal-back＝index.html の style。ユーザーの指示「太陽ポータルに戻るボタンは左上に設置。
+              太陽ポータル全アプリ共通にする。色や大きさも含めて統一する」2026-10-28。前は右上の白い枠の字） */}
+          <a href="https://akamar08taiyo-bot.github.io/taiyo-portal/" className="taiyo-portal-back">
+            ← 業務アプリポータルへ戻る
+          </a>
           <div className="flex items-center gap-3 min-w-0">
             <div className="uriage-brand-mark h-9 w-9 shrink-0 rounded-lg grid place-items-center text-lg font-bold">太</div>
             <div className="min-w-0">
@@ -663,9 +668,6 @@ export default function UriageDenpyo({
               <p className="text-[11px] text-green-100">太陽シルバーサービス</p>
             </div>
           </div>
-          <a href="https://akamar08taiyo-bot.github.io/taiyo-portal/" className="ml-auto rounded-md border border-white/30 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-white/10">
-            業務アプリポータルへ
-          </a>
         </div>
       </header>
       <div className="max-w-[1500px] mx-auto px-4 pt-4">

@@ -6,6 +6,13 @@
     <title>売上伝票発行依頼書</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+/* 業務アプリポータルへ戻るボタン（太陽ポータルの全アプリ共通。色・大きさ・字はどのアプリでも同じにするため、アプリの書式に負けないよう !important。
+   ユーザーの指示「太陽ポータルに戻るボタンは左上に設置。太陽ポータル全アプリ共通にする。色や大きさも含めて統一する」2026-10-28。決まりは taiyo-portal スキル） */
+.taiyo-portal-back{display:inline-flex!important;align-items:center!important;gap:4px;box-sizing:border-box!important;height:34px!important;margin:0;padding:0 12px!important;border:1px solid #cbd5e1!important;border-radius:8px!important;background:#fff!important;color:#334155!important;font:500 13px/1 "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Yu Gothic","Meiryo",sans-serif!important;letter-spacing:0!important;text-decoration:none!important;white-space:nowrap!important;flex:none!important;box-shadow:0 1px 2px rgba(15,23,42,.08)!important}
+.taiyo-portal-back:hover{background:#f1f5f9!important;color:#0f172a!important}
+.taiyo-portal-back:focus-visible{outline:2px solid #64748b!important;outline-offset:2px}
+@media print{.taiyo-portal-back{display:none!important}}
+
       html, body, #root { min-height: 100%; margin: 0; }
       /* 色・書体は「申請書・見積書作成」（太陽ポータルの jutaku-mitsumori/）と同じ（ユーザーの指示「水色ではなく、申請書見積もりアプリと同様の色合い、書体など」2026-10-28） */
       body {
