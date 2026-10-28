@@ -54,11 +54,15 @@ const PRINT_MARK_BG = '#fff3a8'    // 利用者/保険者負担額の強調
 const PRINT_TOTAL_BG = '#bfdbfe'   // ご利用者お支払い合計
 
 /* ── スタイル定数 ─────────────────────────────── */
-const card = 'bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 p-4 border border-white/80'
-const sectionTitle = 'text-base font-extrabold text-sky-800 tracking-[0.08em] mb-3'
+// 画面の色・書体は「申請書・見積書作成」（太陽ポータルの jutaku-mitsumori/）にそろえる（ユーザーの指示「売上伝票発行依頼の色合いは水色ではなく、
+// 申請書見積もりアプリと同様の色合い、書体などで統一感を持たせてください」2026-10-28）：濃い緑（#14532d）の見出しの帯・薄い緑灰の地・白い枠・
+// ボタンは白（保存は薄い青・印刷は薄い水色。申請書・見積書作成の Btn と同じ）。印刷・PDF の伝票の色は変えない
+const toolBtn = 'h-11 px-4 rounded-lg border text-base font-bold shadow-sm disabled:opacity-60'
+const card = 'bg-white rounded-xl shadow-sm border border-emerald-200 p-4'
+const sectionTitle = 'text-base font-bold text-[#14532d] mb-3'
 const fieldLabel = 'block text-sm font-bold text-slate-600 mb-1'
 // 高さと文字サイズは用途ごとに付け替えるため、共通部分と分けておく
-const inputCore = 'w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3 font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition'
+const inputCore = 'w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3 font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none transition'
 const baseInput = `${inputCore} h-11 text-lg`
 const noSpin = '[-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0'
 
@@ -79,8 +83,8 @@ function OptionRow({ label, options, value, onChange, cols }) {
               onClick={() => onChange(v)}
               className={`h-11 rounded-lg text-base font-bold transition ${
                 active
-                  ? 'bg-sky-600 text-white shadow-sm shadow-sky-200'
-                  : 'bg-slate-100/80 text-slate-600 hover:bg-sky-50 hover:text-sky-800'
+                  ? 'bg-[#14532d] text-white shadow-sm'
+                  : 'bg-slate-100/80 text-slate-600 hover:bg-emerald-50 hover:text-[#14532d]'
               }`}
             >
               {lbl}
@@ -156,14 +160,14 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
       }}
     >
       <form
-        className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-sky-100 bg-white shadow-2xl shadow-sky-950/15"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-emerald-200 bg-white shadow-2xl shadow-slate-900/15"
         onSubmit={(event) => {
           event.preventDefault()
           onSave()
         }}
       >
-        <div className="border-b border-sky-100 bg-sky-50 px-5 py-4">
-          <h2 id="master-settings-title" className="text-lg font-black text-slate-800">マスタ設定</h2>
+        <div className="border-b border-emerald-200 bg-emerald-50 px-5 py-4">
+          <h2 id="master-settings-title" className="text-lg font-bold text-[#14532d]">マスタ設定</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">
             営業所・担当者・工務店の候補を1行ずつ登録できます。伝票に入力した内容は自動で記憶され、次回はそのまま引き継がれます。
           </p>
@@ -235,13 +239,13 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
             <button
               type="button"
               onClick={onCancel}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-base font-extrabold text-slate-600 hover:bg-slate-50"
+              className="h-11 rounded-lg border border-slate-300 bg-white px-4 text-base font-bold text-slate-700 hover:bg-slate-50"
             >
               キャンセル
             </button>
             <button
               type="submit"
-              className="h-11 rounded-xl bg-sky-600 px-5 text-base font-extrabold text-white shadow-sm shadow-sky-200 hover:brightness-[.98]"
+              className="h-11 rounded-lg border border-blue-200 bg-blue-50 px-5 text-base font-bold text-blue-800 shadow-sm hover:bg-blue-100"
             >
               保存して反映
             </button>
@@ -648,41 +652,39 @@ export default function UriageDenpyo({
     )}
     <div className="uriage-app-shell print:hidden">
       {/* アクションバー */}
-      <div className="max-w-[1500px] mx-auto px-4 pt-4">
-        <a href="https://akamar08taiyo-bot.github.io/taiyo-portal/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
-          ← 業務アプリポータルへ戻る
-        </a>
-        <div className="uriage-hero rounded-3xl px-5 py-4 mb-3 flex flex-wrap items-center gap-4">
-          <div className="uriage-brand-mark h-12 w-12 rounded-2xl flex items-center justify-center text-white text-xl font-black">
-            太
+      <header className="uriage-hero text-white">
+        <div className="max-w-[1500px] mx-auto px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="uriage-brand-mark h-9 w-9 shrink-0 rounded-lg grid place-items-center text-lg font-bold">太</div>
+            <div className="min-w-0">
+              <h1 className="text-base md:text-lg font-bold leading-tight">売上伝票発行依頼書（住宅改修・特定福祉用具購入）</h1>
+              <p className="text-[11px] text-green-100">太陽シルバーサービス</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-extrabold text-sky-700 tracking-[0.16em]">太陽シルバーサービス</p>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-800">売上伝票発行依頼書（住宅改修・特定福祉用具購入）</h1>
-          </div>
-          <div className="ml-auto flex flex-wrap gap-2 text-sm font-bold text-slate-600">
-            <span className="rounded-full bg-sky-50 border border-sky-100 px-3 py-1">URL共有対応</span>
-            <span className="rounded-full bg-teal-50 border border-teal-100 px-3 py-1">印刷対応</span>
-          </div>
+          <a href="https://akamar08taiyo-bot.github.io/taiyo-portal/" className="ml-auto rounded-md border border-white/30 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-white/10">
+            業務アプリポータルへ
+          </a>
         </div>
+      </header>
+      <div className="max-w-[1500px] mx-auto px-4 pt-4">
         {bridge && bridge.enabled && (
           <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
             販売受注簿の特例入力から自動転記されています（受注簿タブ側で編集できます）
           </div>
         )}
-        <div className="bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 px-3 py-2 flex flex-wrap items-center gap-2">
-          <span className="text-base font-extrabold text-sky-800">操作:</span>
-          <button type="button" onClick={createMail} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">PDFでメール</button>
-          <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50 disabled:opacity-60">{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
-          <button type="button" onClick={copyShareLink} className="h-11 px-4 rounded-xl text-base font-extrabold bg-sky-600 text-white shadow-sm shadow-sky-200 hover:brightness-[.98]">共有リンク</button>
-          <button type="button" onClick={openMasterSettings} className="h-11 px-4 rounded-xl text-base font-extrabold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50">マスタ設定</button>
-          <button type="button" onClick={clearAll} className="h-11 px-4 rounded-xl text-base font-extrabold border border-rose-200 text-rose-600 hover:bg-rose-50">空白の状態に戻す</button>
+        <div className="bg-white rounded-xl shadow-sm border border-emerald-200 px-3 py-2 flex flex-wrap items-center gap-2">
+          <span className="text-base font-bold text-[#14532d]">操作:</span>
+          <button type="button" onClick={createMail} disabled={pdfBusy} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>PDFでメール</button>
+          <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className={`${toolBtn} bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100`}>{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
+          <button type="button" onClick={copyShareLink} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>共有リンク</button>
+          <button type="button" onClick={openMasterSettings} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>マスタ設定</button>
+          <button type="button" onClick={clearAll} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>空白の状態に戻す</button>
           <div className="ml-auto text-sm font-bold text-slate-500">{shareMsg}</div>
         </div>
         {shareUrl && (
           <div className="mt-2 share-box">
-            <span className="text-sm font-black text-teal-900">共有URL</span>
-            <a className="truncate text-sm font-bold text-teal-950 underline" href={shareUrl}>{shareUrl}</a>
+            <span className="text-sm font-bold text-[#14532d]">共有URL</span>
+            <a className="truncate text-sm font-bold text-emerald-900 underline" href={shareUrl}>{shareUrl}</a>
             <button
               className="toggle-button min-h-[40px] px-4 py-1 text-base"
               onClick={async () => {
@@ -723,15 +725,15 @@ export default function UriageDenpyo({
                         key={c}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-base font-bold cursor-pointer transition ${
                           active
-                          ? 'bg-sky-600 text-white border-sky-500 shadow-sm shadow-sky-200'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-200'
+                          ? 'bg-emerald-50 text-[#14532d] border-emerald-500 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50 hover:border-emerald-200'
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={active}
                           onChange={() => toggleCategory(c)}
-                          className="w-5 h-5 accent-blue-600"
+                          className="w-5 h-5 accent-emerald-700"
                         />
                         <span>{c}</span>
                       </label>
@@ -903,7 +905,7 @@ export default function UriageDenpyo({
                   id="selfpay"
                   checked={isSelfPay}
                   onChange={(e) => setIsSelfPay(e.target.checked)}
-                  className="w-5 h-5 rounded"
+                  className="w-5 h-5 rounded accent-emerald-700"
                 />
                 <label htmlFor="selfpay" className="text-base font-bold text-slate-600">全額自費</label>
                 <input
@@ -911,7 +913,7 @@ export default function UriageDenpyo({
                   id="welfare"
                   checked={welfare}
                   onChange={(e) => setWelfare(e.target.checked)}
-                  className="ml-5 w-5 h-5 rounded"
+                  className="ml-5 w-5 h-5 rounded accent-emerald-700"
                 />
                 <label htmlFor="welfare" className="text-base font-bold text-slate-600">生活保護</label>
               </div>
@@ -919,9 +921,9 @@ export default function UriageDenpyo({
           </div>
 
           {/* 介護保険残高（任意・超過しそうな時のみ） */}
-          <div className="bg-white/95 rounded-2xl shadow-sm ring-1 ring-sky-100/90 border border-white/80 p-4">
+          <div className="bg-white rounded-xl shadow-sm border border-emerald-200 p-4">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-base font-extrabold text-slate-700">介護保険残高</p>
+              <p className="text-base font-bold text-slate-700">介護保険残高</p>
               <span className="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">任意</span>
             </div>
             <p className="text-sm text-slate-500 mb-2 leading-snug">
@@ -937,7 +939,7 @@ export default function UriageDenpyo({
                 // 未入力（空欄）と 0 は区別する。値が入る場合は非負の整数だけを状態へ入れる。
                 onChange={(e) => setRemaining(e.target.value === '' ? '' : parseYen(e.target.value))}
                 placeholder="超過しそうな時のみ入力"
-                className="w-full h-12 rounded-2xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-right text-2xl font-extrabold tracking-tight text-slate-800 placeholder:text-lg placeholder:font-bold focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full h-12 rounded-2xl border border-slate-200 bg-slate-50/80 pl-9 pr-3 text-right text-2xl font-bold tracking-tight text-slate-800 placeholder:text-lg placeholder:font-bold focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none transition [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           </div>
@@ -948,14 +950,14 @@ export default function UriageDenpyo({
           {/* 明細 */}
           <div className={card}>
             <div className="flex items-center justify-between mb-2">
-              <p className={`${sectionTitle} mb-0`}>明細<span className="ml-1.5 font-bold text-sm text-sky-700">（税込金額で入力）</span></p>
+              <p className={`${sectionTitle} mb-0`}>明細<span className="ml-1.5 font-bold text-sm text-emerald-700">（税込金額で入力）</span></p>
               {serviceType === 'specific' && (
                 <label className="flex items-center gap-1.5 text-sm font-bold text-slate-500 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showDetail}
                     onChange={(e) => setShowDetail(e.target.checked)}
-                    className="w-5 h-5 rounded"
+                    className="w-5 h-5 rounded accent-emerald-700"
                   />
                   商品名も表示
                 </label>
@@ -1025,7 +1027,7 @@ export default function UriageDenpyo({
             <button
               type="button"
               onClick={addItem}
-              className="mt-3 text-base font-extrabold text-sky-600 hover:text-sky-800"
+              className="mt-3 text-base font-bold text-emerald-700 hover:text-[#14532d]"
             >
               ＋ 明細追加
             </button>
@@ -1038,7 +1040,7 @@ export default function UriageDenpyo({
                   id="miyako"
                   checked={miyakoChecked}
                   onChange={(e) => setMiyakoChecked(e.target.checked)}
-                  className="w-5 h-5 rounded"
+                  className="w-5 h-5 rounded accent-emerald-700"
                 />
                 <label htmlFor="miyako" className="text-sm font-bold text-amber-700">
                   個別切り上げ（各明細ごとに利用者負担を切り上げ）
@@ -1077,7 +1079,7 @@ export default function UriageDenpyo({
                   type="checkbox"
                   checked={showExTax}
                   onChange={(e) => setShowExTax(e.target.checked)}
-                  className="w-5 h-5 rounded"
+                  className="w-5 h-5 rounded accent-emerald-700"
                 />
                 税抜表示
               </label>
@@ -1107,15 +1109,15 @@ export default function UriageDenpyo({
           </div>
 
           {/* 合計パネル */}
-          <div className="bg-sky-600 text-white rounded-2xl p-5 shadow-md shadow-sky-200">
+          <div className="bg-emerald-50 border border-emerald-300 text-[#14532d] rounded-xl p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xl font-bold">ご利用者お支払い合計</span>
-              <span className="text-4xl font-black">{fmt(calc.totalUserBurden)}</span>
+              <span className="text-4xl font-bold">{fmt(calc.totalUserBurden)}</span>
             </div>
             {showExTax && (
               <div className="flex items-center justify-between mt-1">
-                <span className="text-base text-blue-100">税抜</span>
-                <span className="text-xl font-bold text-blue-50">{fmt(exTax(calc.totalUserBurden))}</span>
+                <span className="text-base text-emerald-800">税抜</span>
+                <span className="text-xl font-bold text-emerald-800">{fmt(exTax(calc.totalUserBurden))}</span>
               </div>
             )}
           </div>
@@ -1127,9 +1129,9 @@ export default function UriageDenpyo({
           <button
             type="button"
             onClick={handlePrint}
-            className="w-full h-14 bg-sky-600 hover:brightness-[.98] text-white text-xl font-extrabold rounded-2xl shadow-md shadow-sky-200 transition"
+            className="w-full h-14 bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-800 text-xl font-bold rounded-xl shadow-sm transition"
           >
-            印刷
+            🖨 印刷
           </button>
         </div>
       </main>
