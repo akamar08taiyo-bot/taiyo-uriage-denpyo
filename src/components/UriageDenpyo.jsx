@@ -51,7 +51,6 @@ const exTax = (n) => Math.ceil((n || 0) / TAX)
 const PRINT_HEAD_BG = '#d1fae5'    // 表の見出し行
 const PRINT_LABEL_BG = '#ecfdf5'   // 項目名セル
 const PRINT_EXTAX_BG = '#fef9c3'   // 税抜の列
-const PRINT_MARK_BG = '#fff3a8'    // 保険者負担額の強調（利用者負担額の行は強調しない。2026-10-28）
 const PRINT_TOTAL_BG = '#a7f3d0'   // ご利用者お支払い合計
 
 /* ── スタイル定数 ─────────────────────────────── */
@@ -624,8 +623,8 @@ export default function UriageDenpyo({
     setShareMsg('入力内容を削除しました。')
   }
 
-  /* 計算結果行（3つめが true の行は、印刷で黄色く強調する＝保険者負担額だけ。
-     利用者負担額（1割など）の行は黄色くしない：ユーザーの指示「1割の税込の部分は黄色くしなくてもよい」2026-10-28） */
+  /* 計算結果行。利用者負担額（1割など）・保険者負担額（9割など）の行も黄色くしない（項目名・税込はほかの行と同じ色）：
+     ユーザーの指示「1割の税込の部分は黄色くしなくてもよい」、9割の行も「やめます」2026-10-28 */
   const resultRows = [
     ['総合計（税込）', calc.total],
     ...(hasCost ? [['仕切り合計（税込）', totalCost]] : []),
@@ -636,7 +635,7 @@ export default function UriageDenpyo({
     welfare
       ? [`対象内利用者負担額（生活保護・${burdenLabel}・切り上げ）`, calc.aid]
       : [`対象内利用者負担額（${burdenLabel}・切り上げ）`, calc.userBurden],
-    [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden, true],
+    [`保険者負担額（${insuranceLabel}・切り下げ）`, calc.insurerBurden],
   ]
 
   const staffOptions = staffList.filter((n) => (n || '').trim())
@@ -1293,18 +1292,15 @@ export default function UriageDenpyo({
           </tr>
         </thead>
         <tbody>
-          {resultRows.map(([label, val, highlight]) => {
-            const hlStyle = highlight ? { background: PRINT_MARK_BG } : undefined
-            return (
-              <tr key={label}>
-                <td className="border border-slate-500 px-2 py-1" style={{ background: PRINT_LABEL_BG, ...(hlStyle || {}) }}>{label}</td>
-                <td className="border border-slate-500 px-2 py-1 text-right" style={hlStyle}>{fmt(val)}</td>
-                {showExTax && (
-                  <td className="border border-slate-500 px-2 py-1 text-right" style={hlStyle || { background: PRINT_EXTAX_BG }}>{fmt(exTax(val))}</td>
-                )}
-              </tr>
-            )
-          })}
+          {resultRows.map(([label, val]) => (
+            <tr key={label}>
+              <td className="border border-slate-500 px-2 py-1" style={{ background: PRINT_LABEL_BG }}>{label}</td>
+              <td className="border border-slate-500 px-2 py-1 text-right">{fmt(val)}</td>
+              {showExTax && (
+                <td className="border border-slate-500 px-2 py-1 text-right" style={{ background: PRINT_EXTAX_BG }}>{fmt(exTax(val))}</td>
+              )}
+            </tr>
+          ))}
           {/* ご利用者お支払い合計は税込・税抜とも最も目立つ色で強調する */}
           <tr className="border border-slate-500 font-bold">
             <td className="border border-slate-500 px-2 py-1" style={{ background: PRINT_TOTAL_BG }}>ご利用者お支払い合計</td>
