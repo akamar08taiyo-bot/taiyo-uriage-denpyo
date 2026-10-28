@@ -173,40 +173,71 @@ const specific = {
   await ctx.close()
 }
 
-// ⑤ PDFでメール：パソコンでは Thunderbird・Outlook で開く下書き（.eml）を保存する。宛先はマスタ設定（ユーザーの依頼 2026-10-27
-//    「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）
+// ⑤ メール（PDF付き）：パソコンでは PDF を保存して、メールのソフトで宛先・件名・本文の入った新しいメールを開く（mailto:）。宛先はマスタ設定
+//    （ユーザーの依頼 2026-10-27「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」。
+//    前の .eml は Edge が「デバイスに問題を起こす可能性があります」と止めた 2026-10-28）。上の段は 印刷・保存・メール・設定 だけ
+// mailto: を開いた（メールのソフトに渡した）ことを覚える。ブラウザのテストではほかのアプリを開かない
+const catchMailto = () => {
+  window.__mailto = []
+  const click = HTMLAnchorElement.prototype.click
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.href.startsWith('mailto:')) return void window.__mailto.push(this.href)
+    return click.call(this)
+  }
+}
+const readMailto = (url) => {
+  const [head, query] = url.replace(/^mailto:/, '').split('?')
+  return { to: head, ...Object.fromEntries(query.split('&').map((kv) => kv.split('=')).map(([k, v]) => [k, decodeURIComponent(v)])) }
+}
 {
-  const { ctx, page } = await open({ width: 1366, height: 900 }, specific)
+  const { ctx, page } = await open({ width: 1366, height: 900 }, specific, '', { init: [catchMailto] })
   await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
-  await page.getByRole('button', { name: 'マスタ設定' }).click()
+  const bar = page.getByRole('group', { name: '操作' })
+  assert.deepEqual(await bar.getByRole('button').allInnerTexts(), ['🖨 印刷', '💾 保存', '✉ メール', '⚙ 設定'])
+  await bar.getByRole('button', { name: '⚙ 設定' }).click()
   await page.getByLabel('メールの宛先').fill('jimu@example.co.jp')
   await page.getByLabel('メールの CC').fill('kanri@example.co.jp')
   await page.screenshot({ path: `${out}/05-mail-settings.png` })
   await page.getByRole('button', { name: '保存して反映' }).click()
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDFでメール' }).click()])
-  assert.equal(dl.suggestedFilename(), '売上伝票発行のご依頼 見本 花子様.eml')
-  await dl.saveAs(`${out}/mail.eml`)
-  const eml = readFileSync(await dl.path(), 'latin1')
-  const head = eml.split('\r\n\r\n')[0]
-  assert.match(head, /^To: jimu@example\.co\.jp\r\nCc: kanri@example\.co\.jp\r\n/)
-  assert.match(head, /\r\nX-Unsent: 1\r\n/)
-  const b64 = (s) => Buffer.from(s.replace(/\r\n/g, ''), 'base64')
-  const boundary = /boundary="([^"]+)"/.exec(head)[1]
-  const parts = eml.split(`--${boundary}`).slice(1, -1).map((p) => p.replace(/^\r\n/, ''))
-  assert.equal(parts.length, 2)
-  const body = b64(parts[0].split('\r\n\r\n')[1]).toString('utf8')
-  for (const t of ['添付の通り、売上伝票の発行をお願いいたします。', '顧客名：見本 花子 様', 'サービス区分：特定福祉用具', '施工（納品予定日）：2026-10-30']) assert.ok(body.includes(t), body)
-  const [fileHead, fileData] = parts[1].split('\r\n\r\n')
-  assert.match(fileHead, /Content-Type: application\/pdf/)
-  const pdf = b64(fileData)
+  const [dl] = await Promise.all([page.waitForEvent('download'), bar.getByRole('button', { name: '✉ メール' }).click()])
+  assert.match(dl.suggestedFilename(), /^2026-10-30_見本 花子_売上伝票発行依頼書\.pdf$/, dl.suggestedFilename())
+  await dl.saveAs(`${out}/mail.pdf`)
+  const pdf = readFileSync(await dl.path())
   assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-')
   assert.ok(pdf.length > 20000, String(pdf.length))
-  await page.getByText('メールの下書きを保存しました（開くと PDF 付きのメール）。').waitFor()
+  await page.waitForFunction(() => window.__mailto.length === 1)
+  const url = (await page.evaluate(() => window.__mailto))[0]
+  assert.ok(url.length <= 2000, `mailto: は ${url.length} 字（Edge・Chrome は Windows で 2048 字まで）`)
+  const mail = readMailto(url)
+  assert.equal(mail.to, 'jimu%40example.co.jp')
+  assert.equal(mail.cc, 'kanri@example.co.jp')
+  assert.equal(mail.subject, '売上伝票発行のご依頼 見本 花子様')
+  for (const t of ['添付の通り、売上伝票の発行をお願いいたします。', '顧客名：見本 花子 様', 'サービス区分：特定福祉用具', '施工（納品予定日）：2026-10-30']) assert.ok(mail.body.includes(t), mail.body)
+  await page.getByText('PDFを保存して、メールを開きました。PDFをメールに添付してください。').waitFor()
   await page.screenshot({ path: `${out}/05-mail.png` })
+  // 共有リンク・空白の状態に戻すは、下の「🖨 印刷」の下にある
+  await page.getByRole('button', { name: '共有リンク' }).waitFor()
+  await page.getByRole('button', { name: '空白の状態に戻す' }).waitFor()
   // 読み直しても宛先は覚えている
   await page.reload()
-  await page.getByRole('button', { name: 'マスタ設定' }).click()
+  await page.getByRole('button', { name: '⚙ 設定' }).click()
   assert.equal(await page.getByLabel('メールの宛先').inputValue(), 'jimu@example.co.jp')
+  await ctx.close()
+}
+
+// ⑤-2 入力がそろっていなくてもメールは作れる（ユーザーの指示「すべて入力しなくても、メールでとばせるようにする」2026-10-28）。PDF保存は今までどおり止める
+{
+  const { ctx, page } = await open({ width: 1366, height: 900 }, null, '', { init: [catchMailto] })
+  const bar = page.getByRole('group', { name: '操作' })
+  let downloads = 0
+  page.on('download', () => downloads++)
+  await bar.getByRole('button', { name: '💾 保存' }).click()
+  await page.getByRole('alert').waitFor()
+  assert.equal(downloads, 0, '保存（PDF）は止める')
+  const [dl] = await Promise.all([page.waitForEvent('download'), bar.getByRole('button', { name: '✉ メール' }).click()])
+  assert.match(dl.suggestedFilename(), /\.pdf$/)
+  await page.waitForFunction(() => window.__mailto.length === 1)
+  assert.equal(readMailto((await page.evaluate(() => window.__mailto))[0]).subject, '売上伝票発行のご依頼')
   await ctx.close()
 }
 
@@ -235,7 +266,7 @@ const specific = {
     await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
     let downloaded = false
     page.on('download', () => (downloaded = true))
-    await page.getByRole('button', { name: 'PDFでメール' }).click()
+    await page.getByRole('group', { name: '操作' }).getByRole('button', { name: '✉ メール' }).click()
     if (refuse) {
       const again = page.getByRole('dialog', { name: 'メールのアプリに渡す' })
       await again.waitFor()
@@ -252,7 +283,7 @@ const specific = {
     assert.match(shared[0].files[0].name, /\.pdf$/)
     assert.equal(shared[0].files[0].type, 'application/pdf')
     assert.equal(shared[0].files[0].head, '%PDF-')
-    assert.equal(downloaded, false, `${name}：下書きのファイルは保存しない`)
+    assert.equal(downloaded, false, `${name}：ファイルは保存しない（共有メニューで添付まで渡す）`)
     await page.screenshot({ path: `${out}/06-mail-tablet-${name}.png` })
     await ctx.close()
   }
@@ -260,4 +291,4 @@ const specific = {
 
 await browser.close()
 server.close()
-console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → PDFでメール（パソコン・タブレット）')
+console.log('ok: 申請書・見積書作成から受け取る → 生活保護 → 住宅改修 → 共有リンク → メール（パソコン・入力がそろっていなくても・タブレット）')

@@ -1,42 +1,16 @@
-// メールの下書き（ユーザーの依頼「作成したら、メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」2026-10-27）。
-// パソコンは、添付ファイル付きの下書きのメールファイル（.eml。X-Unsent: 1）を作って保存する。開くと、件名・本文・添付の入った新しいメール（送信前）になる。
-// Outlook（パソコンのソフト）も Thunderbird（91 以降。ユーザーの会社は Thunderbird＝2026-10-27 の答え）も、X-Unsent: 1 の .eml を送信前のメールとして開く。
-// 宛先は設定に入れてあれば入る（なければメールのソフトで入れる）。.eml を開くソフトは Windows の既定のアプリ（Thunderbird にしておく）。
-// スマホ・タブレット（ユーザーの話「タブレットからもおくります」）は共有メニュー（navigator.share）で、メールのアプリにファイルと本文を渡す。
-// mailto: ではファイルを付けられないため。販売受注簿作成ツール（taiyo-hacchu-scan の src/lib/mailDraft.mjs）も同じ作り。
+// ワンタッチのメール（ユーザーの依頼「作成したら、メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」2026-10-27）。
+// パソコンは、添付にする PDF・Excel を保存して、メールのソフト（Thunderbird など、mailto: を開く既定のアプリ）で宛先・件名・本文の入った新しいメールを開く。
+// 保存したファイルは、ブラウザのダウンロードの一覧からメールにドラッグして付ける（mailto: ではファイルを付けられない）。
+// 前は添付まで入った下書きのメール（.eml・X-Unsent: 1）を保存していたが、Edge（Chromium）は .eml を「デバイスに問題を起こす可能性がある」種類として止め
+// （保存・保持を押さないと残らない）、メールにそのまま飛ばなかった（ユーザーの報告 2026-10-28。販売受注簿・売上伝票発行依頼書の両方）。
+// スマホ・タブレット（ユーザーの話「タブレットからもおくります」）は共有メニュー（navigator.share）で、メールのアプリにファイルと本文を渡す（添付も入る）。
+// 販売受注簿作成ツール（taiyo-hacchu-scan の src/lib/mailDraft.mjs）と同じ作り（写し）。
 
-const CRLF = '\r\n'
-
-/** UTF-8 のバイト列 → base64（76字ごとに改行） */
-export function base64Lines(bytes) {
-  let bin = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  const b64 = btoa(bin)
-  return b64.match(/.{1,76}/g)?.join(CRLF) ?? ''
-}
-
-const utf8 = (text) => new TextEncoder().encode(text)
-
-/** 見出しの日本語（RFC 2047。長い件名は 1つ 39バイトまでで分けて、1行 78字以内に折り返す） */
-export function encodeWord(text) {
-  if (/^[\x20-\x7e]*$/.test(text)) return text
-  const words = []
-  let chunk = ''
-  for (const ch of text) {
-    if (utf8(chunk + ch).length > 39) {
-      words.push(chunk)
-      chunk = ''
-    }
-    chunk += ch
-  }
-  if (chunk) words.push(chunk)
-  return words.map((w) => `=?UTF-8?B?${btoa(String.fromCharCode(...utf8(w)))}?=`).join(`${CRLF} `)
-}
-
-/** 添付のファイル名：1つの =?UTF-8?B?…?=（Outlook・Thunderbird はかっこの中のこの形を読む。分けない） */
-function encodeName(name) {
-  return /^[\x20-\x7e]*$/.test(name) ? name : `=?UTF-8?B?${btoa(String.fromCharCode(...utf8(name)))}?=`
-}
+/**
+ * メールのソフトに渡せる mailto: の長さ。Chromium（Edge・Chrome）は Windows でほかのアプリに渡す URL を 2048 字までにしていて、
+ * それより長いと何も開かない（platform_util_win.cc の kMaxUrlLength。前後に " が付く）。日本語は1字が %XX×3 の9字になる
+ */
+export const MAILTO_MAX = 2000
 
 /** 宛先（カンマ・空白・改行・；区切り）→ アドレスの並び。メールアドレスの形のものだけ */
 export function addressList(value) {
@@ -46,45 +20,25 @@ export function addressList(value) {
     .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x))
 }
 
-/**
- * 下書きのメール（.eml）の中身。attachments は {name, type, bytes: Uint8Array}。
- * X-Unsent: 1 で、Outlook・Thunderbird（91 以降）は開いたときに送信前の新しいメールとして出す
- */
-export function buildEml({ to = [], cc = [], subject = '', body = '', attachments = [], boundary = `----=_taiyo_${Date.now().toString(36)}` }) {
-  const head = [
-    ...(to.length ? [`To: ${to.join(', ')}`] : []),
-    ...(cc.length ? [`Cc: ${cc.join(', ')}`] : []),
-    `Subject: ${encodeWord(subject)}`,
-    'X-Unsent: 1',
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+/** mailto: の URL（宛先・CC・件名・本文。本文の改行は %0D%0A） */
+export function buildMailto({ to = [], cc = [], subject = '', body = '' }) {
+  const query = [
+    ...(cc.length ? [`cc=${cc.map(encodeURIComponent).join(',')}`] : []),
+    `subject=${encodeURIComponent(subject)}`,
+    `body=${encodeURIComponent(String(body).replace(/\r?\n/g, '\r\n'))}`,
   ]
-  const parts = [
-    [
-      `--${boundary}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: base64',
-      '',
-      base64Lines(utf8(body.replace(/\r?\n/g, CRLF))),
-    ].join(CRLF),
-    ...attachments.map((a) =>
-      [
-        `--${boundary}`,
-        `Content-Type: ${a.type}; name="${encodeName(a.name)}"`,
-        `Content-Disposition: attachment; filename="${encodeName(a.name)}"`,
-        'Content-Transfer-Encoding: base64',
-        '',
-        base64Lines(a.bytes),
-      ].join(CRLF),
-    ),
-  ]
-  return `${head.join(CRLF)}${CRLF}${CRLF}${parts.join(CRLF)}${CRLF}--${boundary}--${CRLF}`
+  return `mailto:${to.map(encodeURIComponent).join(',')}?${query.join('&')}`
+}
+
+/** メールのソフトに渡せる長さに収まるか（長い本文は呼ぶ側で行を減らす） */
+export function mailtoFits(mail) {
+  return buildMailto(mail).length <= MAILTO_MAX
 }
 
 /**
  * スマホ・タブレット（共有メニューでメールのアプリに渡せる端末）か。iPad はパソコンの Mac と同じ名前（Macintosh）で、Android のタブレットは
  * 「PC版サイト」の表示（大きな画面では初めからこれ）だと Linux のパソコンの名前で来るので、指で触れる画面かどうかでも見分ける。
- * Windows のパソコンは共有メニューに Thunderbird が出ないので、指で触れる画面でも下書きのファイルにする
+ * Windows のパソコンは共有メニューに Thunderbird が出ないので、指で触れる画面でもパソコンと同じ（保存＋メールのソフト）
  */
 export function isMobileDevice(nav = typeof navigator === 'undefined' ? null : navigator) {
   if (!nav) return false
@@ -138,9 +92,20 @@ export function safeFileName(value, fallback) {
   return String(value || fallback).replace(/[\\/:*?"<>|\r\n]/g, '_').trim() || fallback
 }
 
+/** リンクを押したのと同じにする（ファイルの保存・mailto:） */
+function follow(href, download) {
+  const a = document.createElement('a')
+  a.href = href
+  if (download) a.download = download
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 /**
- * ワンタッチのメール：スマホ・タブレットは共有メニュー、パソコンは Outlook・Thunderbird で開く下書き（.eml）を保存する。
- * 戻り値：'shared'（共有メニュー）・'eml'（下書きを保存）・'cancelled'（共有をやめた）
+ * ワンタッチのメール：スマホ・タブレットは共有メニュー、パソコンは添付のファイルを保存してメールのソフトで新しいメールを開く。
+ * 押した操作の続きで呼ぶ（メールのソフトを開くのをブラウザに止められないように）。
+ * 戻り値：'shared'（共有メニュー）・'mailto'（保存してメールのソフトを開いた）・'cancelled'（共有をやめた）
  */
 export async function sendMailDraft({ to = [], cc = [], subject, body, attachment }) {
   const file = typeof File === 'function' ? new File([attachment.bytes], attachment.name, { type: attachment.type }) : null
@@ -155,17 +120,12 @@ export async function sendMailDraft({ to = [], cc = [], subject, body, attachmen
         const how = await shareOnTap(data)
         if (how !== 'failed') return how
       }
-      // 共有できなければ下書きのファイルにする
+      // 共有できなければ、パソコンと同じく保存してメールのソフトを開く
     }
   }
-  const eml = buildEml({ to, cc, subject, body, attachments: [attachment] })
-  const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${safeFileName(subject, 'メール')}.eml`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+  const url = URL.createObjectURL(new Blob([attachment.bytes], { type: attachment.type }))
+  follow(url, safeFileName(attachment.name, '添付'))
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  return 'eml'
+  follow(buildMailto({ to, cc, subject, body }))
+  return 'mailto'
 }

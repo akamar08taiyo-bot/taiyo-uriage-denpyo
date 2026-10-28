@@ -5,6 +5,10 @@ import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
 import { calculate, ratioTenths } from '../lib/denpyoCalc.js'
 import { openedFromShinsei, takeImportRequest } from '../lib/importRequest.js'
+// PDF とメールの部品は最初から読み込む（前は押したときに別のファイルを読み込んでいたので、公開し直すと古い画面のまま開いていたタブで
+// 「Failed to fetch dynamically imported module」になり、PDF保存・メールが動かなかった。ユーザーの報告 2026-10-28）
+import { denpyoPdfAttachment, downloadDenpyoPdf } from '../pdf-export.js'
+import { addressList, mailtoFits, sendMailDraft } from '../lib/mailDraft.js'
 
 /* ── 定数 ─────────────────────────────────── */
 const DEFAULT_REMAINING = { housing: 200000, specific: 100000 }
@@ -58,6 +62,8 @@ const PRINT_TOTAL_BG = '#a7f3d0'   // ご利用者お支払い合計
 // 申請書見積もりアプリと同様の色合い、書体などで統一感を持たせてください」2026-10-28）：濃い緑（#14532d）の見出しの帯・薄い緑灰の地・白い枠・
 // ボタンは白（保存は薄い青・印刷は薄い水色。申請書・見積書作成の Btn と同じ）。印刷・PDF の伝票の色は変えない
 const toolBtn = 'h-11 px-4 rounded-lg border text-base font-bold shadow-sm disabled:opacity-60'
+// 上の段（印刷・保存・メール・設定）：スマホの幅では2つずつ並べる（4つ目の設定だけが1段に残らないように）
+const topBtn = `${toolBtn} grow basis-[40%] sm:grow-0 sm:basis-auto`
 const card = 'bg-white rounded-xl shadow-sm border border-emerald-200 p-4'
 const sectionTitle = 'text-base font-bold text-[#14532d] mb-3'
 const fieldLabel = 'block text-sm font-bold text-slate-600 mb-1'
@@ -521,7 +527,6 @@ export default function UriageDenpyo({
     setPdfBusy(true)
     setShareMsg('')
     try {
-      const { downloadDenpyoPdf } = await import('../pdf-export.js')
       await downloadDenpyoPdf({ customerName, issueDate })
       setShareMsg('PDFを保存しました。')
     } catch (error) {
@@ -552,24 +557,28 @@ export default function UriageDenpyo({
     const copied = await writeClipboard(longUrl)
     setShareMsg(copied ? '共有URLをクリップボードにコピーしました。' : '共有URLを下に表示しました。')
   }
-  /* PDFでメール：伝票の PDF を付け、本文を入れた下書きのメールをワンタッチで作る（ユーザーの依頼 2026-10-27
+  /* メール（PDF付き）：伝票の PDF と、件名・本文を入れたメールをワンタッチで作る（ユーザーの依頼 2026-10-27
      「メールでそのまま、PDFかもしくは、Excelの資料送れる機能…添付とメールの文面の作成をワンタッチで」）。
-     パソコンは Thunderbird・Outlook で開く下書き（.eml）、スマホ・タブレットは共有メニュー（../lib/mailDraft.js）。宛先はマスタ設定（なければメールのソフトで入れる） */
+     パソコンは PDF を保存して、メールのソフト（Thunderbird など）で宛先・件名・本文の入った新しいメールを開く（mailto:）。前は .eml（下書き）を保存していたが、
+     Edge が「デバイスに問題を起こす可能性があります」と止め、メールにそのまま飛ばなかった（ユーザーの報告 2026-10-28）。スマホ・タブレットは共有メニュー（../lib/mailDraft.js）。
+     宛先はマスタ設定（なければメールのソフトで入れる）。入力が全部そろっていなくても作れる（ユーザーの指示「すべて入力しなくても、メールでとばせるようにする」2026-10-28。
+     印刷・PDF保存・共有リンクは今までどおり確かめる） */
   async function createMail() {
-    setTriedPrint(true)
-    if (!canPrint) { setShareMsg('入力に不足または誤りがあるためメールを作成できません。'); return }
     setPdfBusy(true)
     setShareMsg('')
     try {
-      // 本文には、受け取った人が同じ伝票を開ける長いURLも付ける（前のメール作成と同じ）
+      // 本文には、受け取った人が同じ伝票を開ける長いURLも付ける（メールのソフトに渡せる長さを超えるときは付けない）
       const longUrl = buildLongShareUrl()
       setShareUrl(longUrl)
-      const [{ denpyoPdfAttachment }, { addressList, sendMailDraft }] = await Promise.all([import('../pdf-export.js'), import('../lib/mailDraft.js')])
       const attachment = await denpyoPdfAttachment({ customerName, issueDate })
+      const to = addressList(master?.mailTo)
+      const cc = addressList(master?.mailCc)
       const subject = `売上伝票発行のご依頼 ${customerName ? `${customerName}様` : ''}`.trim()
-      const body = mailBody({ customerName, serviceType, issueDate, staff, url: longUrl })
-      const how = await sendMailDraft({ to: addressList(master?.mailTo), cc: addressList(master?.mailCc), subject, body, attachment })
-      setShareMsg(how === 'eml' ? 'メールの下書きを保存しました（開くと PDF 付きのメール）。' : how === 'shared' ? 'メールのアプリに渡しました。' : '')
+      const fields = { customerName, serviceType, issueDate, staff }
+      const withUrl = mailBody({ ...fields, url: longUrl })
+      const body = mailtoFits({ to, cc, subject, body: withUrl }) ? withUrl : mailBody(fields)
+      const how = await sendMailDraft({ to, cc, subject, body, attachment })
+      setShareMsg(how === 'mailto' ? 'PDFを保存して、メールを開きました。PDFをメールに添付してください。' : how === 'shared' ? 'メールのアプリに渡しました。' : '')
     } catch (error) {
       setShareMsg(error?.message || 'メールを作成できませんでした。')
     } finally {
@@ -676,13 +685,14 @@ export default function UriageDenpyo({
             販売受注簿の特例入力から自動転記されています（受注簿タブ側で編集できます）
           </div>
         )}
-        <div className="bg-white rounded-xl shadow-sm border border-emerald-200 px-3 py-2 flex flex-wrap items-center gap-2">
-          <span className="text-base font-bold text-[#14532d]">操作:</span>
-          <button type="button" onClick={createMail} disabled={pdfBusy} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>PDFでメール</button>
-          <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} className={`${toolBtn} bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100`}>{pdfBusy ? 'PDF作成中…' : 'PDF保存'}</button>
-          <button type="button" onClick={copyShareLink} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>共有リンク</button>
-          <button type="button" onClick={openMasterSettings} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>マスタ設定</button>
-          <button type="button" onClick={clearAll} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>空白の状態に戻す</button>
+        {/* 上の段は 印刷・保存・メール・設定 だけ（ユーザーの指示「上のタブは、印刷、保存、メール、見積もり作成、設定のみにする」2026-10-28。
+            見積もり作成はこのアプリにない）。保存は PDF、メールは PDF 付き。色は申請書・見積書作成の Btn と同じ（印刷＝薄い水色・保存＝薄い青・ほかは白）。
+            共有リンク・空白の状態に戻すは、下の「🖨 印刷」の下に移した */}
+        <div className="bg-white rounded-xl shadow-sm border border-emerald-200 px-3 py-2 flex flex-wrap items-center gap-2" role="group" aria-label="操作">
+          <button type="button" onClick={handlePrint} className={`${topBtn} bg-sky-50 border-sky-300 text-sky-800 hover:bg-sky-100`}>🖨 印刷</button>
+          <button type="button" onClick={handleDownloadPdf} disabled={pdfBusy} title="PDFで保存" className={`${topBtn} bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100`}>{pdfBusy ? 'PDF作成中…' : '💾 保存'}</button>
+          <button type="button" onClick={createMail} disabled={pdfBusy} title="PDFを付けてメール" className={`${topBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>✉ メール</button>
+          <button type="button" onClick={openMasterSettings} className={`${topBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>⚙ 設定</button>
           <div className="ml-auto text-sm font-bold text-slate-500">{shareMsg}</div>
         </div>
         {shareUrl && (
@@ -1137,6 +1147,11 @@ export default function UriageDenpyo({
           >
             🖨 印刷
           </button>
+          {/* 上の段から移したもの（上の段は 印刷・保存・メール・設定 だけにした 2026-10-28） */}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={copyShareLink} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>共有リンク</button>
+            <button type="button" onClick={clearAll} className={`${toolBtn} bg-white border-slate-300 text-slate-700 hover:bg-slate-50`}>空白の状態に戻す</button>
+          </div>
         </div>
       </main>
     </div>

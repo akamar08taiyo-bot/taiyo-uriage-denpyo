@@ -1,52 +1,46 @@
-// メールの下書き（.eml）：Thunderbird・Outlook で開くと、件名・本文・添付の入った送信前のメールになる形か（ユーザーの依頼 2026-10-27）
+// ワンタッチのメール（販売受注簿作成ツールの test/mailDraft.test.mjs と同じ）：パソコンはメールのソフトを mailto: で開く。
+// 前の .eml は Edge が「デバイスに問題を起こす可能性があります」と止め、メールにそのまま飛ばなかった（ユーザーの報告 2026-10-28）
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { addressList, buildEml, encodeWord, isMobileDevice, safeFileName } from '../src/lib/mailDraft.js'
+import { MAILTO_MAX, addressList, buildMailto, isMobileDevice, mailtoFits, safeFileName } from '../src/lib/mailDraft.js'
 
-/** 見出しの =?UTF-8?B?…?= を戻す */
-const decodeWords = (s) => s.replace(/\r\n /g, '').replace(/=\?UTF-8\?B\?([^?]*)\?=/g, (_, b) => new TextDecoder().decode(Uint8Array.from(atob(b), (c) => c.charCodeAt(0))))
-const decodeB64 = (s) => Uint8Array.from(atob(s.replace(/\r\n/g, '')), (c) => c.charCodeAt(0))
+/** mailto: を読み戻す（宛先・cc・件名・本文） */
+function readMailto(url) {
+  const [head, query] = url.replace(/^mailto:/, '').split('?')
+  const params = Object.fromEntries(query.split('&').map((kv) => kv.split('=')).map(([k, v]) => [k, decodeURIComponent(v)]))
+  return { to: head ? head.split(',').map(decodeURIComponent) : [], ...params }
+}
 
-test('下書きのメール：宛先・件名・X-Unsent・本文・添付（PDF）', () => {
-  const pdf = new TextEncoder().encode('%PDF-1.3 見本')
-  const eml = buildEml({
-    to: ['jimu@example.co.jp'],
+test('mailto：宛先・CC・件名・本文（改行は CRLF）が入る', () => {
+  const url = buildMailto({
+    to: ['jimu@example.co.jp', 'b@example.jp'],
     cc: ['kanri@example.co.jp'],
-    subject: '売上伝票発行のご依頼 見本 花子様（とても長い件名になっても折り返して入る）',
-    body: 'お疲れ様です。\n添付の通り、売上伝票の発行をお願いいたします。',
-    attachments: [{ name: '2026-10-30_見本 花子_売上伝票発行依頼書.pdf', type: 'application/pdf', bytes: pdf }],
-    boundary: 'BOUNDARY',
+    subject: '発注依頼（販売受注簿送付）の件 見本 花子様',
+    body: 'お疲れ様です。\n表題の通り、発注をお願いします。\n&=?#% の記号もそのまま',
   })
-  const [head, ...rest] = eml.split('\r\n\r\n')
-  assert.match(head, /^To: jimu@example\.co\.jp\r\nCc: kanri@example\.co\.jp\r\nSubject: /)
-  assert.match(head, /\r\nX-Unsent: 1\r\n/)
-  assert.match(head, /Content-Type: multipart\/mixed; boundary="BOUNDARY"/)
-  assert.equal(decodeWords(/Subject: ([\s\S]*?)\r\nX-Unsent/.exec(head)[1]), '売上伝票発行のご依頼 見本 花子様（とても長い件名になっても折り返して入る）')
-  // 見出しの1行は 78字以内（長い件名は折り返す）
-  for (const line of head.split('\r\n')) assert.ok(line.length <= 78, line)
-  const body = rest.join('\r\n\r\n')
-  const parts = body.split('--BOUNDARY').slice(1, -1).map((p) => p.replace(/^\r\n/, '').replace(/\r\n$/, ''))
-  assert.equal(parts.length, 2)
-  const [textHead, textBody] = parts[0].split('\r\n\r\n')
-  assert.match(textHead, /text\/plain; charset="UTF-8"/)
-  assert.equal(new TextDecoder().decode(decodeB64(textBody)), 'お疲れ様です。\r\n添付の通り、売上伝票の発行をお願いいたします。')
-  const [fileHead, fileBody] = parts[1].split('\r\n\r\n')
-  assert.match(fileHead, /^Content-Type: application\/pdf; name="=\?UTF-8\?B\?/)
-  assert.equal(decodeWords(/filename="([^"]*)"/.exec(fileHead)[1]), '2026-10-30_見本 花子_売上伝票発行依頼書.pdf')
-  assert.deepEqual(decodeB64(fileBody), pdf)
-  assert.ok(eml.endsWith('--BOUNDARY--\r\n'))
+  assert.match(url, /^mailto:jimu%40example\.co\.jp,b%40example\.jp\?cc=/)
+  assert.ok(!/[\s\u3000]/.test(url), '空白・日本語はすべて %XX にする')
+  const m = readMailto(url)
+  assert.deepEqual(m.to, ['jimu@example.co.jp', 'b@example.jp'])
+  assert.equal(m.cc, 'kanri@example.co.jp')
+  assert.equal(m.subject, '発注依頼（販売受注簿送付）の件 見本 花子様')
+  assert.equal(m.body, 'お疲れ様です。\r\n表題の通り、発注をお願いします。\r\n&=?#% の記号もそのまま')
 })
 
-test('宛先がなければ To・Cc の行を書かない（メールのソフトで入れる）', () => {
-  const eml = buildEml({ subject: 'a', body: 'b', attachments: [], boundary: 'B' })
-  assert.match(eml, /^Subject: a\r\n/)
-  assert.ok(!/^To:/m.test(eml) && !/^Cc:/m.test(eml))
+test('宛先がなければ mailto:? で始める（メールのソフトで入れる）', () => {
+  assert.match(buildMailto({ subject: 'a', body: 'b' }), /^mailto:\?subject=a&body=b$/)
 })
 
-test('宛先の読み方・件名の英数字はそのまま・ファイル名・スマホの見分け', () => {
+test('長さ：Edge・Chrome が Windows でほかのアプリに渡せる 2048 字より短く収める', () => {
+  assert.ok(MAILTO_MAX <= 2046)
+  const line = '・入浴グリップ 見本 PN-0000 オレンジ（PN-0000）　1台'
+  assert.equal(mailtoFits({ subject: '件名', body: Array(3).fill(line).join('\n') }), true)
+  assert.equal(mailtoFits({ subject: '件名', body: Array(12).fill(line).join('\n') }), false)
+})
+
+test('宛先の読み方・ファイル名・スマホの見分け', () => {
   assert.deepEqual(addressList('a@example.jp, b@example.jp；c@example.jp\nまちがい'), ['a@example.jp', 'b@example.jp', 'c@example.jp'])
   assert.deepEqual(addressList(''), [])
-  assert.equal(encodeWord('Order 123'), 'Order 123')
   assert.equal(safeFileName('a/b:c', 'x'), 'a_b_c')
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }), true)
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', maxTouchPoints: 5 }), true) // iPad
@@ -55,6 +49,6 @@ test('宛先の読み方・件名の英数字はそのまま・ファイル名�
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710)' }), true)
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/141.0 Safari/537.36', maxTouchPoints: 10 }), true)
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', maxTouchPoints: 0, userAgentData: { platform: 'Android' } }), true)
-  // Windows のパソコンは指で触れる画面でも下書きのファイル（共有メニューに Thunderbird が出ないので）
+  // Windows のパソコンは指で触れる画面でもパソコンと同じ（共有メニューに Thunderbird が出ないので）
   assert.equal(isMobileDevice({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', maxTouchPoints: 10 }), false)
 })

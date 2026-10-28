@@ -1,3 +1,8 @@
+// html2canvas・jsPDF は最初から読み込む（前は押したときに別のファイル（assets/jspdf…・html2canvas…）を読み込んでいたが、それらの名前は公開し直すたびに変わり、
+// 古いファイルは消すので、前の画面のまま開いていたタブでは「Failed to fetch dynamically imported module」で PDF保存・メールが動かなかった。2026-10-28）
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
+
 function safeFileName(value) {
   return String(value || '売上伝票発行依頼書').replace(/[\\/:*?"<>|]/g, '_')
 }
@@ -11,7 +16,6 @@ export async function buildDenpyoPdf() {
   const source = document.querySelector('.uriage-print')
   if (!source) throw new Error('PDFにする帳票が見つかりませんでした。')
 
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
   if (document.fonts?.ready) await document.fonts.ready
 
   // 印刷用ブロックは通常時 display:none のため、画面外のサンドボックスで実寸表示させて描画する
