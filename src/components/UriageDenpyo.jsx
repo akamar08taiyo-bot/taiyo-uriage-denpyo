@@ -46,12 +46,13 @@ const exTax = (n) => Math.ceil((n || 0) / TAX)
 
 /* 計算ロジックは ../lib/denpyoCalc.js（生活保護・整数の負担割合） */
 
-/* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている） ── */
-const PRINT_HEAD_BG = '#dbeafe'    // 表の見出し行
-const PRINT_LABEL_BG = '#eff6ff'   // 項目名セル
+/* ── 印刷用の配色（白黒印刷でも判別できる濃さにしている）。
+   見出し・項目名・合計は、画面と同じ薄い緑（ユーザーの答え「すべてお願いします」2026-10-28。前は薄い水色。白黒での濃さは前とほぼ同じ） ── */
+const PRINT_HEAD_BG = '#d1fae5'    // 表の見出し行
+const PRINT_LABEL_BG = '#ecfdf5'   // 項目名セル
 const PRINT_EXTAX_BG = '#fef9c3'   // 税抜の列
 const PRINT_MARK_BG = '#fff3a8'    // 利用者/保険者負担額の強調
-const PRINT_TOTAL_BG = '#bfdbfe'   // ご利用者お支払い合計
+const PRINT_TOTAL_BG = '#a7f3d0'   // ご利用者お支払い合計
 
 /* ── スタイル定数 ─────────────────────────────── */
 // 画面の色・書体は「申請書・見積書作成」（太陽ポータルの jutaku-mitsumori/）にそろえる（ユーザーの指示「売上伝票発行依頼の色合いは水色ではなく、
