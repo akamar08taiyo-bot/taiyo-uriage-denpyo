@@ -158,8 +158,31 @@ const specific = {
   const text = await page.locator('main').innerText()
   assert.match(text, /対象内利用者負担額（1割・切り上げ）\s*¥16,500/)
   await page.screenshot({ path: `${out}/04-housing-pc.png`, fullPage: true })
+  assert.match(text, /仕切り・利益/) // 仕切りが入っているときだけ出す
   // 申請書・見積書作成から入った施工業者は、施工業者のリストに覚えない（打った名前だけ覚える）
   assert.equal(await page.getByRole('button', { name: '施工業者のリストを開く' }).count(), 0)
+  await ctx.close()
+}
+
+// ③の1 住宅改修：申請書・見積書作成は仕切りを入れない（0 円）→ 仕切りの欄は空・「仕切り・利益」は出さない。手で入れたら出る
+{
+  const { ctx, page } = await open({ width: 1366, height: 900 }, {
+    serviceType: 'housing',
+    issueDate: '2026-11-05',
+    staff: '見本 太郎',
+    customerName: '見本 花子',
+    customerType: 'existing',
+    billingType: 'receipt',
+    careLevel: '支援２',
+    userRatio: 0.1,
+    items: [{ amount: 165000, cost: 0, productName: '住宅改修工事', color: '' }],
+    welfare: false,
+  })
+  await page.getByText('申請書・見積書作成から読み込みました。').waitFor()
+  assert.deepEqual(await page.getByPlaceholder('仕切り(税込)').evaluateAll((l) => l.map((x) => x.value)), [''])
+  assert.doesNotMatch(await page.locator('main').innerText(), /仕切り・利益/)
+  await page.getByPlaceholder('仕切り(税込)').fill('100000')
+  await page.getByText('仕切り・利益').waitFor()
   await ctx.close()
 }
 

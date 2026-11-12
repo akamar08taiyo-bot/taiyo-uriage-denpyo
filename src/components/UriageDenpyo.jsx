@@ -1155,8 +1155,9 @@ export default function UriageDenpyo({
             )}
           </div>
 
-          {/* 仕切り合計（住宅改修のみ） */}
-          {hasCost && total > 0 && (
+          {/* 仕切り合計（住宅改修のみ）。仕切りを入れるまでは出さない（申請書・見積書作成からは仕切りを入れないので、
+              「利益率 100.0%」と出て紛らわしい。ユーザーの指示「ここは自動で入れない」2026-11-12） */}
+          {hasCost && total > 0 && totalCost > 0 && (
             <div className={card}>
               <p className={sectionTitle}>仕切り・利益</p>
               <div className="grid grid-cols-3 gap-2 text-center">
