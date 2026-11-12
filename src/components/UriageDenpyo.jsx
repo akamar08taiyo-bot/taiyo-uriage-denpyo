@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { printDoc } from '../print.js'
 import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeClipboard } from '../share.js'
 import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
@@ -120,6 +120,93 @@ function MoneyInput({ value, onChange, placeholder }) {
   )
 }
 
+/* 施工業者の欄：一度打った名前を覚えて ▼ のリストに出し、リストから消せる
+   （ユーザーの指示「一度登録したら、次からリストに上げる。また、リストから削除もできる」2026-11-12）。
+   ブラウザの datalist は消すボタンを付けられず、出方も端末で変わるので自前のリストにした。リストは設定の「施工業者の候補」と同じ（master.contractors）。
+   覚えるのは、この欄に打って欄を離れたとき（Enter でも）だけ。申請書・見積書作成から入った名前や、リストから選んだ名前は覚え直さない
+   （リストから消した名前が、印刷などのたびに戻ってこないように） */
+function ContractorField({ value, onChange, options, onRemember, onRemove, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  const typed = useRef(false)
+  useEffect(() => {
+    if (!open) return undefined
+    const close = (event) => { if (!boxRef.current?.contains(event.target)) setOpen(false) }
+    const esc = (event) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open])
+  useEffect(() => { if (!options.length) setOpen(false) }, [options.length])
+  const remember = () => {
+    if (!typed.current) return
+    typed.current = false
+    onRemember(value)
+  }
+  // ▼・リストを押しても欄のフォーカスを外さない（打ちかけの字を覚えてしまわないように）
+  const keepFocus = (event) => event.preventDefault()
+  return (
+    <div ref={boxRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { typed.current = true; onChange(e.target.value) }}
+        onBlur={remember}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) remember() }}
+        placeholder={placeholder}
+        aria-label="施工業者"
+        className={`${baseInput} ${options.length ? 'pr-12' : ''}`}
+      />
+      {options.length > 0 && (
+        <button
+          type="button"
+          aria-label="施工業者のリストを開く"
+          aria-expanded={open}
+          onMouseDown={keepFocus}
+          onClick={() => setOpen((o) => !o)}
+          className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-10 rounded-md text-sm text-slate-500 hover:bg-slate-100"
+        >
+          ▼
+        </button>
+      )}
+      {open && options.length > 0 && (
+        <ul
+          role="listbox"
+          aria-label="施工業者のリスト"
+          className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-300 bg-white shadow-lg"
+        >
+          {options.map((name) => (
+            <li key={name} className="flex items-center gap-1 border-b border-slate-100 last:border-b-0">
+              <button
+                type="button"
+                role="option"
+                aria-selected={name === value}
+                onMouseDown={keepFocus}
+                onClick={() => { typed.current = false; onChange(name); setOpen(false) }}
+                className={`min-h-11 flex-1 break-all px-3 py-2 text-left text-base text-slate-800 hover:bg-emerald-50 ${name === value ? 'bg-emerald-50' : ''}`}
+              >
+                {name}
+              </button>
+              <button
+                type="button"
+                aria-label={`${name}をリストから削除`}
+                onMouseDown={keepFocus}
+                onClick={() => onRemove(name)}
+                className="mr-1.5 h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                削除
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /* ── メインコンポーネント ─────────────────────── */
 const normalizeMasterLines = (value) => [
   ...new Set(
@@ -202,7 +289,7 @@ function MasterSettingsPanel({ draft, onChange, onCancel, onSave }) {
             />
           </section>
           <section>
-            <label className={fieldLabel} htmlFor="master-contractors">工務店の候補</label>
+            <label className={fieldLabel} htmlFor="master-contractors">施工業者の候補</label>
             <textarea
               id="master-contractors"
               rows={8}
@@ -649,6 +736,16 @@ export default function UriageDenpyo({
 
   const staffOptions = staffList.filter((n) => (n || '').trim())
   const contractorOptions = contractorList.filter((n) => (n || '').trim())
+  // 施工業者のリスト：打った名前を足す（同じ名前は1つ）・消す前に確かめる
+  const rememberContractor = (name) => {
+    const n = String(name || '').trim()
+    if (!n || !setMaster) return
+    setMaster((prev) => ((prev.contractors || []).includes(n) ? prev : { ...prev, contractors: [...(prev.contractors || []), n] }))
+  }
+  const removeContractor = (name) => {
+    if (!setMaster || !window.confirm(`「${name}」を施工業者のリストから消しますか？`)) return
+    setMaster((prev) => ({ ...prev, contractors: (prev.contractors || []).filter((n) => n !== name) }))
+  }
 
   /* ── 画面 ─────────────────────────────────── */
   return (
@@ -853,19 +950,14 @@ export default function UriageDenpyo({
               {serviceType === 'housing' && (
                 <div>
                   <label className={fieldLabel}>施工業者</label>
-                  <input
-                    type="text"
-                    list="uriage-contractor-list"
+                  <ContractorField
                     value={contractor}
-                    onChange={(e) => setContractor(e.target.value)}
-                    placeholder={contractorList.length ? '入力 / 候補から選択' : '施工業者名を入力'}
-                    className={baseInput}
+                    onChange={setContractor}
+                    options={contractorOptions}
+                    onRemember={rememberContractor}
+                    onRemove={removeContractor}
+                    placeholder={contractorOptions.length ? '入力 / 候補から選択' : '施工業者名を入力'}
                   />
-                  <datalist id="uriage-contractor-list">
-                    {contractorList.filter((n) => (n || '').trim()).map((n) => (
-                      <option key={n} value={n} />
-                    ))}
-                  </datalist>
                 </div>
               )}
             </div>

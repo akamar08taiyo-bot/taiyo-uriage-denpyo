@@ -158,6 +158,61 @@ const specific = {
   const text = await page.locator('main').innerText()
   assert.match(text, /対象内利用者負担額（1割・切り上げ）\s*¥16,500/)
   await page.screenshot({ path: `${out}/04-housing-pc.png`, fullPage: true })
+  // 申請書・見積書作成から入った施工業者は、施工業者のリストに覚えない（打った名前だけ覚える）
+  assert.equal(await page.getByRole('button', { name: '施工業者のリストを開く' }).count(), 0)
+  await ctx.close()
+}
+
+// ③の2 施工業者：打った名前を覚えて ▼ のリストに出す・リストから選ぶ・消す（ユーザーの指示「一度登録したら、次からリストに上げる。また、リストから削除もできる」2026-11-12）
+for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
+  const tag = viewport.width < 500 ? 'phone' : 'pc'
+  const { ctx, page } = await open(viewport, null)
+  const field = page.getByRole('textbox', { name: '施工業者' })
+  const toggle = page.getByRole('button', { name: '施工業者のリストを開く' })
+  const list = page.getByRole('listbox', { name: '施工業者のリスト' })
+  const names = () => list.getByRole('option').allInnerTexts()
+  assert.equal(await toggle.count(), 0, 'リストが空のうちは ▼ を出さない')
+  await field.fill('見本建設')
+  await field.press('Tab') // 欄を離れたら覚える
+  await toggle.click()
+  assert.deepEqual(await names(), ['見本建設'])
+  await toggle.click()
+  await field.fill('見本工務店')
+  await field.press('Enter') // Enter でも覚える
+  await toggle.click()
+  assert.deepEqual(await names(), ['見本建設', '見本工務店'])
+  await page.keyboard.press('Escape')
+  await list.waitFor({ state: 'detached' })
+
+  // 次に開いたときもリストに出る
+  await page.reload()
+  await page.getByText('売上伝票発行依頼書（住宅改修・特定福祉用具購入）').first().waitFor()
+  assert.equal(await field.inputValue(), '見本工務店')
+  // 打ちかけの字（見本）はリストに入れず、リストから選んだ名前が入る
+  await field.fill('見本')
+  await toggle.click()
+  await list.getByRole('option').last().scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${out}/04b-contractor-list-${tag}.png` })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewport.width)
+  await list.getByRole('option', { name: '見本建設' }).click()
+  await list.waitFor({ state: 'detached' })
+  assert.equal(await field.inputValue(), '見本建設')
+  await page.getByText('基本情報').first().click()
+  await toggle.click()
+  assert.deepEqual(await names(), ['見本建設', '見本工務店'])
+
+  // リストから消す（確かめてから）。欄の字はそのまま、消した名前は戻ってこない
+  await list.getByRole('button', { name: '見本工務店をリストから削除' }).click()
+  assert.deepEqual(await names(), ['見本建設'])
+  assert.equal(await field.inputValue(), '見本建設')
+  await page.reload()
+  await page.getByText('売上伝票発行依頼書（住宅改修・特定福祉用具購入）').first().waitFor()
+  await toggle.click()
+  assert.deepEqual(await names(), ['見本建設'])
+  // 設定の「施工業者の候補」と同じリスト
+  await page.keyboard.press('Escape')
+  await page.getByRole('group', { name: '操作' }).getByRole('button', { name: /設定/ }).click()
+  assert.equal(await page.locator('#master-contractors').inputValue(), '見本建設')
   await ctx.close()
 }
 
