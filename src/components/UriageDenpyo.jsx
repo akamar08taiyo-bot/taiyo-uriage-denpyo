@@ -4,6 +4,7 @@ import { encodePayload, decodePayload, shortenUrl, readPayloadFromHash, writeCli
 import { todayInTokyo, isValidDateString } from '../lib/businessDate.js'
 import { parseYen, validateDenpyoForOutput } from '../lib/denpyoValidation.js'
 import { calculate, ratioTenths } from '../lib/denpyoCalc.js'
+import { officeChoices } from '../lib/offices.js'
 import { openedFromShinsei, takeImportRequest } from '../lib/importRequest.js'
 // PDF とメールの部品は最初から読み込む（前は押したときに別のファイルを読み込んでいたので、公開し直すと古い画面のまま開いていたタブで
 // 「Failed to fetch dynamically imported module」になり、PDF保存・メールが動かなかった。ユーザーの報告 2026-10-28）
@@ -359,6 +360,7 @@ export default function UriageDenpyo({
   const officeList = master.offices || []
   const contractorList = master.contractors || []
   const [salesOffice, setSalesOffice] = useState(() => localStorage.getItem('fukushi_salesOffice') || portalSessionOffice() || '')
+  const selectableOffices = officeChoices(officeList, salesOffice)
   // 業務日は日本時間で判定する（UTC基準だとJST深夜0〜9時に前日になる）
   const today = todayInTokyo()
 
@@ -870,20 +872,18 @@ export default function UriageDenpyo({
                   />
                 </div>
                 <div>
-                  <label className={fieldLabel}>営業所</label>
-                  <input
-                    type="text"
-                    list="uriage-office-list"
+                  <label className={fieldLabel} htmlFor="sales-office">営業所</label>
+                  <select
+                    id="sales-office"
                     value={salesOffice}
                     onChange={(e) => setSalesOffice(e.target.value)}
                     className={baseInput}
-                    placeholder="営業所を入力"
-                  />
-                  <datalist id="uriage-office-list">
-                    {officeList.filter((n) => (n || '').trim()).map((n) => (
+                  >
+                    <option value="">営業所を選択してください</option>
+                    {selectableOffices.map((n) => (
                       <option key={n} value={n}>{n}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
                 <div>
                   <label className={fieldLabel}>担当者 <span className="text-red-400">*</span></label>
