@@ -359,7 +359,7 @@ export default function UriageDenpyo({
   const staffList = master.salesPersons || []
   const officeList = master.offices || []
   const contractorList = master.contractors || []
-  const [salesOffice, setSalesOffice] = useState(() => localStorage.getItem('fukushi_salesOffice') || portalSessionOffice() || '')
+  const [salesOffice, setSalesOffice] = useState(() => portalSessionOffice() || localStorage.getItem('fukushi_salesOffice') || '')
   const selectableOffices = officeChoices(officeList, salesOffice)
   // 業務日は日本時間で判定する（UTC基準だとJST深夜0〜9時に前日になる）
   const today = todayInTokyo()
